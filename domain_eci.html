@@ -298,11 +298,11 @@
                 </div>
             </div>
 
-            <div class="flex-1 p-6" id="chart-container">
+            <div class="flex-1 p-2 lg:p-6" id="chart-container">
                 <!-- Plotly Chart -->
             </div>
 
-            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex justify-between">
+            <div class="px-4 lg:px-6 py-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex justify-between">
                 <span id="status-text">Ready.</span>
                 <span>Select benchmarks to update the graph.</span>
             </div>
@@ -959,14 +959,24 @@
 
             try {
                 const plotData = [];
+                const isMobile = window.innerWidth < 1024;
                 let layout = {
-                    title: { text: 'Model Capability (ECI) over Time', font: { family: 'Inter', size: 22, weight: 900, color: '#111827' } },
+                    title: {
+                        text: 'Model Capability (ECI) over Time',
+                        font: { family: 'Inter', size: isMobile ? 16 : 22, weight: 900, color: '#111827' }
+                    },
                     xaxis: { title: { text: 'Release Date', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     yaxis: { title: { text: 'Domain-specific ECI', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     hovermode: 'closest',
                     template: 'plotly_white',
-                    margin: { t: 90, r: 50, l: 80, b: 100 },
-                    legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center', font: { size: 13, weight: 500 } },
+                    margin: isMobile ? { t: 60, r: 10, l: 40, b: 80 } : { t: 90, r: 50, l: 80, b: 100 },
+                    legend: {
+                        orientation: 'h',
+                        y: isMobile ? -0.2 : -0.15,
+                        x: 0.5,
+                        xanchor: 'center',
+                        font: { size: isMobile ? 10 : 13, weight: 500 }
+                    },
                     font: { family: 'Inter, sans-serif' }
                 };
 
@@ -1597,6 +1607,13 @@
                 if (menuBtn) menuBtn.addEventListener('click', () => toggleSidebar(true));
                 if (closeBtn) closeBtn.addEventListener('click', () => toggleSidebar(false));
                 if (overlay) overlay.addEventListener('click', () => toggleSidebar(false));
+
+                // Resize listener
+                let resizeTimer;
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => updateChart(), 200);
+                });
 
                 // Initial Render
                 if (status) status.innerText = "Rendering filters...";
