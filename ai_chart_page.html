@@ -128,8 +128,9 @@
                 const datasetNames = Object.keys(schemas);
                 if (datasetNames.length === 0) throw new Error("No datasets loaded.");
 
+                // Limit keys to 25 to avoid large payload size
                 const schemaDescription = Object.entries(schemas).map(([name, keys]) =>
-                    `Dataset: "${name}"\nKeys: ${keys.slice(0, 50).join(', ')}${keys.length > 50 ? '...' : ''}`
+                    `Dataset: "${name}"\nKeys: ${keys.slice(0, 25).join(', ')}${keys.length > 25 ? '...' : ''}`
                 ).join('\n\n');
 
                 const prompt = `
@@ -151,6 +152,7 @@ Task:
    - Dates are usually strings "YYYY-MM-DD" -> Convert to Date objects.
 
 Response Format (JSON ONLY):
+Return valid JSON with no markdown formatting.
 {
   "dataset": "Exact name of the selected dataset",
   "code": "The full JavaScript code for the function getChartConfig"
@@ -163,23 +165,36 @@ Response Format (JSON ONLY):
                     body: JSON.stringify({
                         messages: [{ role: 'user', content: prompt }],
                         model: 'openai',
-                        jsonMode: true
+                        jsonMode: false // Explicitly false as some proxies don't support it
                     })
                 });
 
-                if (!response.ok) throw new Error('AI service failed to respond.');
+                if (!response.ok) throw new Error('AI service failed to respond (HTTP ' + response.status + ').');
 
                 let text = await response.text();
                 console.log("Raw AI Response:", text);
 
-                // Basic cleaning to handle markdown code blocks if any
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                // Robust JSON extraction
+                let jsonStr = text.trim();
+                // If it contains markdown code blocks, try to extract content inside
+                const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (codeBlockMatch) {
+                    jsonStr = codeBlockMatch[1].trim();
+                } else {
+                    // Fallback: find first '{' and last '}'
+                    const firstBrace = jsonStr.indexOf('{');
+                    const lastBrace = jsonStr.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1) {
+                        jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+                    }
+                }
 
                 let aiResponse;
                 try {
-                    aiResponse = JSON.parse(text);
+                    aiResponse = JSON.parse(jsonStr);
                 } catch (e) {
-                    throw new Error("Failed to parse AI response as JSON.");
+                    console.error("JSON Parse Error:", e);
+                    throw new Error("Failed to parse AI response as JSON. Raw text logged to console.");
                 }
 
                 if (!aiResponse.dataset || !aiResponse.code) {
@@ -221,7 +236,11 @@ Response Format (JSON ONLY):
 
             } catch (err) {
                 console.error(err);
-                showStatus('Failed to generate chart: ' + err.message, 'error');
+                let msg = err.message;
+                if (msg === 'Failed to fetch') {
+                     msg += ' (Network error or adblocker blocked the AI service)';
+                }
+                showStatus('Failed to generate chart: ' + msg, 'error');
             } finally {
                 setLoading(false);
             }
