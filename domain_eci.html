@@ -114,6 +114,12 @@
                     Compare
                 </button>
             </div>
+            <label
+                class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
+                <input type="checkbox" id="show-ci-toggle"
+                    class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
+                <span class="text-sm font-medium text-gray-700">Show 90% CI</span>
+            </label>
             <button id="download-btn"
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 Export Data
@@ -301,7 +307,8 @@
             mode: 'fixed', // 'fixed', 'refit', 'compare'
             models: [], // Computed capabilities
             cachedRefit: null,
-            minBenchmarks: 2
+            minBenchmarks: 2,
+            showCI: false
         };
 
         const DOMAIN_MAP = {
@@ -363,6 +370,41 @@
             Object.keys(RAW_DATA.benchmarks).forEach(id => {
                 RAW_DATA.benchmarks[id].domain = DOMAIN_MAP[id] || "Other";
             });
+        }
+
+        function calculateBootstrapCI(performances, diffs, discs, scaling = { a: 0, b: 1 }, n_boot = 100) {
+            if (performances.length < 2) return { low: null, high: null };
+
+            const thetas = [];
+            // Optimization: Use a simpler solver or initial guess for speed? 
+            // For now, use standard solveFixed but maybe with fewer steps or robust logic.
+
+            for (let i = 0; i < n_boot; i++) {
+                const res_perfs = [];
+                const res_diffs = [];
+                const res_discs = [];
+                for (let j = 0; j < performances.length; j++) {
+                    const idx = Math.floor(Math.random() * performances.length);
+                    res_perfs.push(performances[idx]);
+                    res_diffs.push(diffs[idx]);
+                    res_discs.push(discs[idx]);
+                }
+
+                // Add jitter to avoid identical resamples collapsing in rare cases (optional but good for stability)
+                let theta = solveFixed(res_perfs, res_diffs, res_discs);
+
+                // Apply scaling if provided (Refit mode) is typically A + B*theta
+                // For Fixed mode, scaling is A=0, B=1 (no-op)
+                theta = scaling.a + scaling.b * theta;
+
+                thetas.push(theta);
+            }
+
+            thetas.sort((a, b) => a - b);
+            const low = thetas[Math.floor(n_boot * 0.05)];
+            const high = thetas[Math.floor(n_boot * 0.95)];
+
+            return { low, high };
         }
 
         // --- Core Math: Sigmoid ---
@@ -615,7 +657,7 @@
                     if (ability[m] !== undefined) ability[m] = finalA + finalB * ability[m];
                 });
 
-                return ability;
+                return { ability, difficulty, discriminability, scaling: { a: finalA, b: finalB } };
 
             } catch (e) {
                 console.error("JMLE Failed:", e);
@@ -921,7 +963,11 @@
                             fixedScores[modelId] = solveFixed(perfs, diffs, discs);
                         }
                     });
-                    const refitScores = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                    const refitResult = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                    const refitScores = refitResult.ability || {};
+                    const refitDiffs = refitResult.difficulty || {};
+                    const refitDiscs = refitResult.discriminability || {};
+                    const refitScaling = refitResult.scaling || { a: 0, b: 1 };
 
                     // 2. Filter & Collect
                     const rawPoints = []; // {id, x, y, count}
@@ -933,7 +979,49 @@
                             const cy = refitScores[modelId];
                             const count = Object.keys(RAW_DATA.performances[modelId] || {}).filter(b => activeBenchmarks.includes(b)).length;
 
-                            rawPoints.push({ id: modelId, x: cx, y: cy, count, name: m.name });
+                            let ciFixed = { low: null, high: null };
+                            let ciRefit = { low: null, high: null };
+
+                            if (state.showCI) {
+                                // Calc Fixed CI
+                                const perfs = [], diffs = [], discs = [];
+                                activeBenchmarks.forEach(bId => {
+                                    if (RAW_DATA.performances[modelId] && RAW_DATA.performances[modelId][bId] !== undefined) {
+                                        perfs.push(RAW_DATA.performances[modelId][bId]);
+                                        diffs.push(RAW_DATA.benchmarks[bId].diff);
+                                        discs.push(RAW_DATA.benchmarks[bId].disc);
+                                    }
+                                });
+                                ciFixed = calculateBootstrapCI(perfs, diffs, discs);
+
+                                // Calc Refit CI (using Bootstrapped Ability on Fixed Refit Item Params)
+                                const rPerfs = [], rDiffs = [], rDiscs = [];
+                                activeBenchmarks.forEach(bId => {
+                                    if (RAW_DATA.performances[modelId] && RAW_DATA.performances[modelId][bId] !== undefined) {
+                                        rPerfs.push(RAW_DATA.performances[modelId][bId]);
+                                        // Use the difficulty/disc from the JMLE result
+                                        const d = refitDiffs[bId];
+                                        const a = refitDiscs[bId];
+                                        if (d !== undefined && a !== undefined) {
+                                            rDiffs.push(d);
+                                            rDiscs.push(a);
+                                        }
+                                    }
+                                });
+                                if (rDiffs.length === rPerfs.length) {
+                                    ciRefit = calculateBootstrapCI(rPerfs, rDiffs, rDiscs, refitScaling);
+                                }
+                            }
+
+                            rawPoints.push({
+                                id: modelId,
+                                x: cx,
+                                y: cy,
+                                count,
+                                name: m.name,
+                                ciFixed,
+                                ciRefit
+                            });
                         }
                     });
 
@@ -1001,7 +1089,29 @@
                                 line: { width: 1, color: 'white' },
                                 opacity: 0.85
                             },
-                            hovertemplate: '<b>%{hovertext}</b><br>Fixed: %{x:.1f}<br>Refit: %{y:.1f}<extra></extra>'
+                            error_x: state.showCI ? {
+                                type: 'data',
+                                array: points.map(p => (p.ciFixed.high !== null ? p.ciFixed.high - p.x : null)),
+                                arrayminus: points.map(p => (p.ciFixed.low !== null ? p.x - p.ciFixed.low : null)),
+                                visible: true,
+                                color: 'rgba(0,0,0,0.2)',
+                                thickness: 1,
+                                width: 2
+                            } : undefined,
+                            error_y: state.showCI ? {
+                                type: 'data',
+                                array: points.map(p => (p.ciRefit.high !== null ? p.ciRefit.high - p.y : null)),
+                                arrayminus: points.map(p => (p.ciRefit.low !== null ? p.y - p.ciRefit.low : null)),
+                                visible: true,
+                                color: 'rgba(0,0,0,0.2)',
+                                thickness: 1,
+                                width: 2
+                            } : undefined,
+                            hovertemplate: '<b>%{hovertext}</b><br>Fixed: %{x:.1f} %{customdata[0]}<br>Refit: %{y:.1f} %{customdata[1]}<extra></extra>',
+                            customdata: points.map(p => [
+                                p.ciFixed.low ? `[${p.ciFixed.low.toFixed(1)}, ${p.ciFixed.high.toFixed(1)}]` : '',
+                                p.ciRefit.low ? `[${p.ciRefit.low.toFixed(1)}, ${p.ciRefit.high.toFixed(1)}]` : ''
+                            ])
                         });
                     });
 
@@ -1029,11 +1139,14 @@
                             if (perfs.length >= state.minBenchmarks) {
                                 const theta = solveFixed(perfs, diffs, discs);
                                 // Store x as numeric timestamp for collision logic
+                                const ci = state.showCI ? calculateBootstrapCI(perfs, diffs, discs) : { low: null, high: null };
+                                // Store x as numeric timestamp for collision logic
                                 rawPoints.push({
                                     id: modelId,
                                     x: new Date(m.date).getTime(),
                                     dateStr: m.date,
                                     y: theta,
+                                    ci,
                                     count: perfs.length,
                                     name: m.name
                                 });
@@ -1046,7 +1159,12 @@
                         status.innerText = "Refitting model...";
                         await new Promise(r => setTimeout(r, 50));
                         try {
-                            const refitScores = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                            const refitResult = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                            const refitScores = refitResult.ability || {};
+                            const refitDiffs = refitResult.difficulty || {};
+                            const refitDiscs = refitResult.discriminability || {};
+                            const refitScaling = refitResult.scaling || { a: 0, b: 1 };
+
                             Object.keys(refitScores).forEach(modelId => {
                                 const m = RAW_DATA.models[modelId];
                                 if (m && m.date) {
@@ -1059,6 +1177,29 @@
                                         count: count,
                                         name: m.name
                                     });
+
+                                    if (state.showCI) {
+                                        // Calc Refit CI
+                                        const rPerfs = [], rDiffs = [], rDiscs = [];
+                                        activeBenchmarks.forEach(bId => {
+                                            if (RAW_DATA.performances[modelId] && RAW_DATA.performances[modelId][bId] !== undefined) {
+                                                rPerfs.push(RAW_DATA.performances[modelId][bId]);
+                                                const d = refitDiffs[bId];
+                                                const a = refitDiscs[bId];
+                                                if (d !== undefined && a !== undefined) {
+                                                    rDiffs.push(d);
+                                                    rDiscs.push(a);
+                                                }
+                                            }
+                                        });
+                                        if (rDiffs.length === rPerfs.length) {
+                                            rawPoints[rawPoints.length - 1].ci = calculateBootstrapCI(rPerfs, rDiffs, rDiscs, refitScaling);
+                                        } else {
+                                            rawPoints[rawPoints.length - 1].ci = { low: null, high: null };
+                                        }
+                                    } else {
+                                        rawPoints[rawPoints.length - 1].ci = { low: null, high: null };
+                                    }
                                 }
                             });
                         } catch (e) { console.error(e); }
@@ -1121,7 +1262,17 @@
                                 line: { width: 1.5, color: 'white' },
                                 opacity: 0.9
                             },
-                            hovertemplate: '<b>%{hovertext}</b><br>Date: %{x}<br>ECI: %{y:.2f}<extra></extra>'
+                            error_y: state.showCI ? {
+                                type: 'data',
+                                array: points.map(p => (p.ci.high !== null ? p.ci.high - p.y : null)),
+                                arrayminus: points.map(p => (p.ci.low !== null ? p.y - p.ci.low : null)),
+                                visible: true,
+                                color: 'rgba(0,0,0,0.2)',
+                                thickness: 1,
+                                width: 2
+                            } : undefined,
+                            hovertemplate: '<b>%{hovertext}</b><br>Date: %{x}<br>ECI: %{y:.2f} %{customdata}<extra></extra>',
+                            customdata: points.map(p => p.ci.low ? `[${p.ci.low.toFixed(1)}, ${p.ci.high.toFixed(1)}]` : '')
                         });
                     });
 
@@ -1157,7 +1308,8 @@
                 // Pre-calc JMLE if needed
                 let refitScores = {};
                 if (state.mode === 'refit' || state.mode === 'compare') {
-                    refitScores = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                    const res = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                    refitScores = res.ability || {};
                 }
 
                 modelIds.forEach(id => {
@@ -1334,6 +1486,15 @@
                         const display = document.getElementById('min-benchmarks-val');
                         if (display) display.innerText = val;
                         state.minBenchmarks = val;
+                        updateChart();
+                    });
+                }
+
+                // Show CI toggle
+                const ciToggle = document.getElementById('show-ci-toggle');
+                if (ciToggle) {
+                    ciToggle.addEventListener('change', (e) => {
+                        state.showCI = e.target.checked;
                         updateChart();
                     });
                 }
