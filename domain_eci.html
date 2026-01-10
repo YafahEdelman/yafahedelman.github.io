@@ -372,7 +372,7 @@
             });
         }
 
-        function calculateBootstrapCI(performances, diffs, discs, scaling = { a: 0, b: 1 }, n_boot = 100) {
+        function calculateBootstrapCI(performances, diffs, discs, scaling = { a: 0, b: 1 }, n_boot = 1000) {
             if (performances.length < 2) return { low: null, high: null };
 
             const thetas = [];
