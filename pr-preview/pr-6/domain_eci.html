@@ -171,6 +171,11 @@
                 <!-- Mobile Controls (Scrollable) -->
                 <div class="lg:hidden p-4 space-y-4 border-b border-gray-200 bg-gray-50">
                      <div class="flex flex-col space-y-1 bg-white p-1 rounded-lg border border-gray-200">
+                        <button id="mobile-view-chart" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Chart</button>
+                        <button id="mobile-view-table" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Table</button>
+                     </div>
+
+                     <div class="flex flex-col space-y-1 bg-white p-1 rounded-lg border border-gray-200">
                         <button id="mobile-mode-fixed" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Fixed Parameters</button>
                         <button id="mobile-mode-refit" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Refit (JMLE)</button>
                         <button id="mobile-mode-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Compare</button>
@@ -1632,24 +1637,48 @@
                 });
 
                 // View Switching
-                const viewBtns = ['view-chart', 'view-table'];
-                viewBtns.forEach(bid => {
+                function updateViewUI(selectedView) {
+                    // Desktop
+                    ['view-chart', 'view-table'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            if (id === `view-${selectedView}`) {
+                                el.className = "px-3 py-1.5 rounded-md text-sm font-medium transition-all shadow-sm bg-white text-gray-900 border border-gray-200";
+                            } else {
+                                el.className = "px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all";
+                            }
+                        }
+                    });
+
+                    // Mobile
+                    ['mobile-view-chart', 'mobile-view-table'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            if (id === `mobile-view-${selectedView}`) {
+                                el.className = "px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900";
+                            } else {
+                                el.className = "px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50";
+                            }
+                        }
+                    });
+                }
+
+                ['view-chart', 'view-table', 'mobile-view-chart', 'mobile-view-table'].forEach(bid => {
                     const el = document.getElementById(bid);
                     if (el) {
-                        el.addEventListener('click', (e) => {
-                            viewBtns.forEach(id => {
-                                const b = document.getElementById(id);
-                                if (b) b.className = "px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all";
-                            });
-                            e.target.className = "px-3 py-1.5 rounded-md text-sm font-medium transition-all shadow-sm bg-white text-gray-900 border border-gray-200";
-                            state.view = bid.replace('view-', '');
+                        el.addEventListener('click', () => {
+                            const view = bid.includes('mobile-') ? bid.replace('mobile-view-', '') : bid.replace('view-', '');
+                            state.view = view;
+                            updateViewUI(view);
                             updateChart();
+                            if (window.innerWidth < 1024 && bid.includes('mobile-')) toggleSidebar(false);
                         });
                     }
                 });
 
                 // Initialize UI state
                 updateModeUI(state.mode);
+                updateViewUI(state.view);
 
                 // Bulk actions
                 const selectAll = document.getElementById('select-all');
