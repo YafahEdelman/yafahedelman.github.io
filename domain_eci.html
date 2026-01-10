@@ -1013,8 +1013,14 @@
                 const tr = document.createElement('tr');
                 tr.className = `hover:bg-gray-50 transition-colors ${fontSize}`;
 
+                const modelClass = isMobile
+                    ? `${cellPadding} font-medium text-gray-900 max-w-[120px] truncate cursor-pointer`
+                    : `${cellPadding} whitespace-nowrap font-medium text-gray-900`;
+
+                const modelClick = isMobile ? 'onclick="this.classList.toggle(\'truncate\')"' : '';
+
                 let rowHTML = `
-                    <td class="${cellPadding} whitespace-nowrap font-medium text-gray-900">${p.name}</td>
+                    <td class="${modelClass}" ${modelClick}>${p.name}</td>
                     <td class="${cellPadding} whitespace-nowrap text-gray-500">${p.dateStr}</td>
                 `;
 
