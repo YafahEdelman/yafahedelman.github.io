@@ -1007,6 +1007,9 @@
 
             if (activeBenchmarks.length === 0) {
                 Plotly.purge('chart-container');
+                if (state.view === 'table') {
+                    renderTable([], state.mode);
+                }
                 status.innerText = "Select at least one benchmark.";
                 return;
             }
