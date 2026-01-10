@@ -94,12 +94,21 @@
 <body class="bg-gray-50 text-gray-900 h-screen flex flex-col">
 
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
-        <div>
-            <h1 class="text-xl font-bold text-gray-800">Domain-ECI Explorer</h1>
-            <p class="text-sm text-gray-500">Select benchmarks to estimate capability over time</p>
+    <header class="bg-white border-b border-gray-200 px-4 lg:px-6 py-4 flex justify-between items-center shadow-sm z-10 relative">
+        <div class="flex items-center gap-3">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-md">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+            <div>
+                <h1 class="text-lg lg:text-xl font-bold text-gray-800">Domain-ECI Explorer</h1>
+                <p class="hidden lg:block text-sm text-gray-500">Select benchmarks to estimate capability over time</p>
+            </div>
         </div>
-        <div class="flex items-center gap-4">
+
+        <!-- Desktop Controls -->
+        <div class="hidden lg:flex items-center gap-4">
             <div class="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                 <button id="mode-fixed"
                     class="px-3 py-1.5 rounded-md text-sm font-medium transition-all shadow-sm bg-white text-gray-900 border border-gray-200">
@@ -128,11 +137,42 @@
     </header>
 
     <!-- Main Content -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- Mobile Overlay -->
+        <div id="sidebar-overlay" class="absolute inset-0 bg-gray-900/50 z-20 hidden lg:hidden backdrop-blur-sm transition-opacity opacity-0"></div>
 
         <!-- Sidebar: Search & Filter -->
-        <aside
-            class="w-80 bg-white border-r border-gray-200 flex flex-col z-0 transition-all duration-300 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]">
+        <aside id="sidebar"
+            class="fixed inset-y-0 left-0 w-80 bg-white border-r border-gray-200 flex flex-col z-30 transition-transform duration-300 transform -translate-x-full lg:relative lg:translate-x-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:shadow-none">
+
+            <!-- Mobile Sidebar Header & Controls -->
+            <div class="lg:hidden border-b border-gray-200 bg-gray-50">
+                 <div class="flex justify-between items-center px-5 py-4 border-b border-gray-100">
+                    <h2 class="font-bold text-gray-800">Settings</h2>
+                    <button id="sidebar-close-btn" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                 </div>
+                 <div class="p-4 space-y-4">
+                     <!-- Mobile Modes -->
+                     <div class="flex flex-col space-y-1 bg-white p-1 rounded-lg border border-gray-200">
+                        <button id="mobile-mode-fixed" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Fixed Parameters</button>
+                        <button id="mobile-mode-refit" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Refit (JMLE)</button>
+                        <button id="mobile-mode-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Compare</button>
+                     </div>
+
+                     <div class="flex items-center justify-between">
+                         <span class="text-sm font-medium text-gray-700">Show 90% CI</span>
+                         <input type="checkbox" id="mobile-show-ci-toggle" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
+                     </div>
+
+                     <button id="mobile-download-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Export Data
+                     </button>
+                 </div>
+            </div>
+
             <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
                 <h2 class="font-black text-gray-800 tracking-tight text-base">Filters</h2>
                 <span id="benchmark-count"
@@ -1431,25 +1471,54 @@
                 }
 
                 // Export functionality
-                const exportBtn = document.getElementById('download-btn');
-                if (exportBtn) {
-                    exportBtn.addEventListener('click', exportData);
-                }
+                const handleExport = () => exportData();
+                ['download-btn', 'mobile-download-btn'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('click', handleExport);
+                });
 
                 // Mode switching
-                const btns = ['mode-fixed', 'mode-refit', 'mode-compare'];
-                btns.forEach(bid => {
-                    const el = document.getElementById(bid);
-                    if (el) {
-                        el.addEventListener('click', (e) => {
-                            const buttons = btns.map(id => document.getElementById(id)).filter(Boolean);
-                            buttons.forEach(b => b.className = "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-900 transition-all");
-                            e.target.className = "px-4 py-2 rounded-xl text-sm font-black bg-white text-indigo-600 shadow-sm border border-indigo-100 ring-4 ring-indigo-50";
-                            state.mode = bid.replace('mode-', '');
-                            updateChart();
-                        });
-                    }
+                const modes = ['fixed', 'refit', 'compare'];
+
+                function updateModeUI(selectedMode) {
+                    modes.forEach(m => {
+                        // Desktop
+                        const dBtn = document.getElementById(`mode-${m}`);
+                        if (dBtn) {
+                             if (m === selectedMode) {
+                                dBtn.className = "px-3 py-1.5 rounded-md text-sm font-medium transition-all shadow-sm bg-white text-gray-900 border border-gray-200";
+                             } else {
+                                dBtn.className = "px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all";
+                             }
+                        }
+                        // Mobile
+                        const mBtn = document.getElementById(`mobile-mode-${m}`);
+                        if (mBtn) {
+                            if (m === selectedMode) {
+                                mBtn.className = "px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-indigo-50 text-indigo-700 border border-indigo-200";
+                            } else {
+                                mBtn.className = "px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50";
+                            }
+                        }
+                    });
+                }
+
+                modes.forEach(m => {
+                    ['mode-', 'mobile-mode-'].forEach(prefix => {
+                        const el = document.getElementById(prefix + m);
+                        if (el) {
+                            el.addEventListener('click', () => {
+                                state.mode = m;
+                                updateModeUI(m);
+                                updateChart();
+                                if (window.innerWidth < 1024) toggleSidebar(false); // Close sidebar on mobile selection
+                            });
+                        }
+                    });
                 });
+
+                // Initialize UI state
+                updateModeUI(state.mode);
 
                 // Bulk actions
                 const selectAll = document.getElementById('select-all');
@@ -1491,13 +1560,43 @@
                 }
 
                 // Show CI toggle
-                const ciToggle = document.getElementById('show-ci-toggle');
-                if (ciToggle) {
-                    ciToggle.addEventListener('change', (e) => {
-                        state.showCI = e.target.checked;
-                        updateChart();
-                    });
+                function toggleCI(checked) {
+                    state.showCI = checked;
+                    const dToggle = document.getElementById('show-ci-toggle');
+                    if (dToggle) dToggle.checked = checked;
+                    const mToggle = document.getElementById('mobile-show-ci-toggle');
+                    if (mToggle) mToggle.checked = checked;
+                    updateChart();
                 }
+
+                const ciToggle = document.getElementById('show-ci-toggle');
+                if (ciToggle) ciToggle.addEventListener('change', (e) => toggleCI(e.target.checked));
+
+                const mobCiToggle = document.getElementById('mobile-show-ci-toggle');
+                if (mobCiToggle) mobCiToggle.addEventListener('change', (e) => toggleCI(e.target.checked));
+
+                // Mobile Sidebar Logic
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+                const menuBtn = document.getElementById('mobile-menu-btn');
+                const closeBtn = document.getElementById('sidebar-close-btn');
+
+                function toggleSidebar(show) {
+                    if (show) {
+                        sidebar.classList.remove('-translate-x-full');
+                        overlay.classList.remove('hidden');
+                        // Small delay for opacity transition
+                        setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+                    } else {
+                        sidebar.classList.add('-translate-x-full');
+                        overlay.classList.add('opacity-0');
+                        setTimeout(() => overlay.classList.add('hidden'), 300);
+                    }
+                }
+
+                if (menuBtn) menuBtn.addEventListener('click', () => toggleSidebar(true));
+                if (closeBtn) closeBtn.addEventListener('click', () => toggleSidebar(false));
+                if (overlay) overlay.addEventListener('click', () => toggleSidebar(false));
 
                 // Initial Render
                 if (status) status.innerText = "Rendering filters...";
