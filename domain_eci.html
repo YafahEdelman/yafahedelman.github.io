@@ -834,7 +834,7 @@
         }
 
         // --- Smart Label Placement ---
-        function selectNonOverlappingLabels(points, xDomain, yDomain) {
+        function selectNonOverlappingLabels(points, xDomain, yDomain, isMobile) {
             // points: Array of { id, x, y, count, name }
             // xDomain: [min, max]
             // yDomain: [min, max]
@@ -864,8 +864,8 @@
             }));
 
             // Label dimensions
-            const charWidth = 0.007; // Approx width per char normalized
-            const labelHeight = 0.04;
+            const charWidth = isMobile ? 0.02 : 0.007; // Approx width per char normalized
+            const labelHeight = isMobile ? 0.06 : 0.04;
             const offset = 0.015;
 
             // Positions to try in order of preference
@@ -963,6 +963,8 @@
         function renderTable(points, mode) {
             const tableHeader = document.getElementById('table-header');
             const tableBody = document.getElementById('table-body');
+            const isMobile = window.innerWidth < 1024;
+
             tableBody.innerHTML = '';
             tableHeader.innerHTML = '';
 
@@ -973,9 +975,18 @@
                 headers = ['Model', 'Date', 'ECI', 'Benchmarks Count'];
             }
 
+            const cellPadding = isMobile ? "px-2 py-2" : "px-6 py-4";
+            const headerPadding = isMobile ? "px-2 py-3" : "px-6 py-3";
+            const fontSize = isMobile ? "text-xs" : "text-sm";
+
             headers.forEach(h => {
+                if (isMobile) {
+                    if (h === 'Benchmarks Count') h = 'Count';
+                    if (h === 'Fixed ECI') h = 'Fixed';
+                    if (h === 'Refit ECI') h = 'Refit';
+                }
                 const th = document.createElement('th');
-                th.className = "px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider";
+                th.className = `${headerPadding} text-left text-xs font-bold text-gray-500 uppercase tracking-wider`;
                 th.innerText = h;
                 tableHeader.appendChild(th);
             });
@@ -985,7 +996,7 @@
                 if (val === undefined || val === null) return '-';
                 let s = val.toFixed(2);
                 if (ci && ci.low !== null && ci.high !== null) {
-                    s += ` <span class="text-xs text-gray-400">[${ci.low.toFixed(2)}, ${ci.high.toFixed(2)}]</span>`;
+                    s += ` <span class="text-[10px] text-gray-400">[${ci.low.toFixed(2)}, ${ci.high.toFixed(2)}]</span>`;
                 }
                 return s;
             };
@@ -1000,27 +1011,27 @@
 
             pointsWithDate.forEach(p => {
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-gray-50 transition-colors";
+                tr.className = `hover:bg-gray-50 transition-colors ${fontSize}`;
 
                 let rowHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">${p.name}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-500">${p.dateStr}</td>
+                    <td class="${cellPadding} whitespace-nowrap font-medium text-gray-900">${p.name}</td>
+                    <td class="${cellPadding} whitespace-nowrap text-gray-500">${p.dateStr}</td>
                 `;
 
                 if (mode === 'compare') {
                     // p.x is Fixed, p.y is Refit
                     rowHTML += `
-                        <td class="px-6 py-4 whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.x, p.ciFixed)}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.y, p.ciRefit)}</td>
+                        <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.x, p.ciFixed)}</td>
+                        <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.y, p.ciRefit)}</td>
                     `;
                 } else {
                     // p.y is ECI
                     rowHTML += `
-                        <td class="px-6 py-4 whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.y, p.ci)}</td>
+                        <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.y, p.ci)}</td>
                     `;
                 }
 
-                rowHTML += `<td class="px-6 py-4 whitespace-nowrap text-gray-500 text-center">${p.count}</td>`;
+                rowHTML += `<td class="${cellPadding} whitespace-nowrap text-gray-500 text-center">${p.count}</td>`;
                 tr.innerHTML = rowHTML;
                 tableBody.appendChild(tr);
             });
@@ -1054,7 +1065,7 @@
                     yaxis: { title: { text: 'Domain-specific ECI', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     hovermode: 'closest',
                     template: 'plotly_white',
-                    margin: isMobile ? { t: 60, r: 10, l: 40, b: 80 } : { t: 90, r: 50, l: 80, b: 100 },
+                    margin: isMobile ? { t: 60, r: 40, l: 40, b: 80 } : { t: 90, r: 50, l: 80, b: 100 },
                     legend: {
                         orientation: 'h',
                         y: isMobile ? -0.2 : -0.15,
@@ -1196,7 +1207,7 @@
                     document.getElementById('chart-container').classList.remove('hidden');
 
                     // Smart Labeling
-                    const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange);
+                    const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange, isMobile);
 
                     // Deconstruct for Plotly
                     // Group by Organization
@@ -1379,7 +1390,7 @@
                         layout.yaxis.range = yRange;
                     }
 
-                    const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange);
+                    const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange, isMobile);
 
                     //Sort by date for line connection if we wanted lines (here strictly markers)
                     rawPoints.sort((a, b) => a.x - b.x);
