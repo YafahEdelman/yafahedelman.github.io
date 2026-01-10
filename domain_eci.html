@@ -142,34 +142,39 @@
                         class="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded shadow-sm ring-1 ring-gray-100">2</span>
                 </div>
                 <div class="relative w-full h-6 flex items-center">
-                    <!-- Custom Ticks -->
+                    <!-- Custom Ticks (Dots) on Track -->
                     <div class="absolute w-full h-1 top-1/2 -translate-y-1/2 pointer-events-none px-[8px]">
                         <!-- 1 (0%) -->
-                        <div class="absolute left-[0%] top-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div
+                            class="absolute left-[0%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
                         </div>
                         <!-- 2 (6.66%) -->
-                        <div class="absolute left-[6.66%] top-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div
+                            class="absolute left-[6.66%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
                         </div>
                         <!-- 4 (20%) -->
-                        <div class="absolute left-[20%] top-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div
+                            class="absolute left-[20%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
                         </div>
                         <!-- 8 (46.66%) -->
-                        <div class="absolute left-[46.66%] top-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div
+                            class="absolute left-[46.66%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
                         </div>
                         <!-- 16 (100%) -->
-                        <div class="absolute right-[0%] top-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div
+                            class="absolute left-[100%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
                         </div>
                     </div>
 
                     <input type="range" id="min-benchmarks" min="1" max="16" value="2" step="1"
                         class="w-full relative z-20 bg-transparent">
                 </div>
-                <div class="relative w-full h-3 mt-1 px-[8px] text-[9px] font-medium text-gray-400 pointer-events-none">
-                    <span class="absolute left-[0%] -translate-x-1/2">1</span>
-                    <span class="absolute left-[6.66%] -translate-x-1/2">2</span>
-                    <span class="absolute left-[20%] -translate-x-1/2">4</span>
-                    <span class="absolute left-[46.66%] -translate-x-1/2">8</span>
-                    <span class="absolute right-[0%] translate-x-1/2">16</span>
+                <div class="relative w-full h-2 mt-1 px-[8px] pointer-events-none">
+                    <div class="absolute left-[0%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                    <div class="absolute left-[6.66%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                    <div class="absolute left-[20%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                    <div class="absolute left-[46.66%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                    <div class="absolute left-[100%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
                 </div>
             </div>
 
@@ -317,6 +322,41 @@
             "Reasoning": "blue", "Math": "amber", "Knowledge": "purple", "Coding": "emerald",
             "Agent": "rose", "Writing": "indigo", "Cyber": "slate", "Vision": "orange", "Other": "gray"
         };
+
+        const ORG_COLORS = {
+            'OpenAI': '#10a37f',
+            'Anthropic': '#d97757',
+            'Google': '#4285F4',
+            'Meta': '#0668E1',
+            'Microsoft': '#F25022',
+            'Mistral': '#f59e0b',
+            'DeepSeek': '#0ea5e9',
+            'Alibaba': '#8b5cf6',
+            'xAI': '#111827',
+            '01.AI': '#059669',
+            'TII': '#57534e',
+            'Baichuan': '#db2777',
+            'NVIDIA': '#76b900',
+            'Other': '#9ca3af'
+        };
+
+        function getOrganization(name) {
+            const n = name.toLowerCase();
+            if (n.includes('gpt') || n.includes('o1') || n.includes('o3') || n.includes('o4')) return 'OpenAI';
+            if (n.includes('claude')) return 'Anthropic';
+            if (n.includes('gemini') || n.includes('gemma')) return 'Google';
+            if (n.includes('llama')) return 'Meta';
+            if (n.includes('mistral') || n.includes('mixtral')) return 'Mistral';
+            if (n.includes('qwen')) return 'Alibaba';
+            if (n.includes('deepseek')) return 'DeepSeek';
+            if (n.includes('yi ')) return '01.AI';
+            if (n.includes('phi')) return 'Microsoft';
+            if (n.includes('grok')) return 'xAI';
+            if (n.includes('nemotron')) return 'NVIDIA';
+            if (n.includes('falcon')) return 'TII';
+            if (n.includes('baichuan')) return 'Baichuan';
+            return 'Other';
+        }
 
         // Inject domain data into RAW_DATA
         if (typeof RAW_DATA !== 'undefined' && RAW_DATA.benchmarks) {
@@ -706,7 +746,7 @@
 
         // --- Smart Label Placement ---
         function selectNonOverlappingLabels(points, xDomain, yDomain) {
-            // points: Array of { id, x, y, count }
+            // points: Array of { id, x, y, count, name }
             // xDomain: [min, max]
             // yDomain: [min, max]
 
@@ -716,69 +756,108 @@
             const norm = p => ({
                 ...p,
                 nx: (p.x - xDomain[0]) / xSpan,
-                ny: (p.y - yDomain[0]) / ySpan
+                ny: (p.y - yDomain[0]) / ySpan,
+                charLen: (p.name || '').length
             });
 
             // Priorities: High benchmark count first
             const normPoints = points.map(norm).sort((a, b) => b.count - a.count);
 
-            // Heuristics for collision box (Normalized 0..1)
-            // Assuming chart is roughly squarish or 16:9, text is wide.
-            // 0.12 width ~ 100 chars? No, 0.12 is 12% of chart width.
-            const labelWidth = 0.15;
-            const labelHeight = 0.05;
-            const pointRadius = 0.012;
+            const placedLabels = []; // {l, r, t, b}
+            const results = new Map(); // id -> textposition
 
-            // Label position: top center. Box is shifted up.
-            const labelOffsetY = 0.02;
-
-            const placedLabels = [];
+            // Heuristic dimensions in normalized coordinates (0..1)
+            // Point radius (approximate circular dominance)
+            const pr = 0.01;
             const pointBoxes = normPoints.map(p => ({
-                l: p.nx - pointRadius, r: p.nx + pointRadius,
-                b: p.ny - pointRadius, t: p.ny + pointRadius
+                l: p.nx - pr, r: p.nx + pr,
+                b: p.ny - pr, t: p.ny + pr
             }));
+
+            // Label dimensions
+            const charWidth = 0.007; // Approx width per char normalized
+            const labelHeight = 0.04;
+            const offset = 0.015;
+
+            // Positions to try in order of preference
+            const positions = [
+                { name: 'top center', dx: 0, dy: 1 },
+                { name: 'bottom center', dx: 0, dy: -1 },
+                { name: 'middle right', dx: 1, dy: 0 },
+                { name: 'middle left', dx: -1, dy: 0 },
+                { name: 'top right', dx: 1, dy: 1 },
+                { name: 'top left', dx: -1, dy: 1 },
+                { name: 'bottom right', dx: 1, dy: -1 },
+                { name: 'bottom left', dx: -1, dy: -1 }
+            ];
 
             const intersect = (r1, r2) => {
                 return !(r2.l > r1.r || r2.r < r1.l || r2.t < r1.b || r2.b > r1.t);
             };
 
-            const acceptedIds = new Set();
-
             for (const p of normPoints) {
-                // Label Box
-                const lb = {
-                    l: p.nx - labelWidth / 2,
-                    r: p.nx + labelWidth / 2,
-                    b: p.ny + labelOffsetY,
-                    t: p.ny + labelOffsetY + labelHeight
-                };
+                // Estimate label width based on char length
+                // Min width 0.04 to avoid tiny boxes for short names
+                const w = Math.max(0.04, p.charLen * charWidth);
+                const h = labelHeight;
 
-                // Check bounds (optional, but keeps labels inside chart)
-                // if (lb.l < 0 || lb.r > 1 || lb.t > 1) continue; 
+                for (const pos of positions) {
+                    let l, r, b, t;
 
-                let collision = false;
+                    // Calculate box based on position relative to point (nx, ny)
+                    if (pos.name.includes('top')) {
+                        b = p.ny + offset;
+                        t = b + h;
+                    } else if (pos.name.includes('bottom')) {
+                        t = p.ny - offset;
+                        b = t - h;
+                    } else {
+                        // middle
+                        b = p.ny - h / 2;
+                        t = p.ny + h / 2;
+                    }
 
-                // 1. Check against placed labels
-                for (const done of placedLabels) {
-                    if (intersect(lb, done)) { collision = true; break; }
+                    if (pos.name.includes('right')) {
+                        l = p.nx + offset;
+                        r = l + w;
+                    } else if (pos.name.includes('left')) {
+                        r = p.nx - offset;
+                        l = r - w;
+                    } else {
+                        // center
+                        l = p.nx - w / 2;
+                        r = p.nx + w / 2;
+                    }
+
+                    const box = { l, r, b, t };
+
+                    // Collision Check
+                    let collision = false;
+
+                    // 1. Check against accepted labels
+                    for (const other of placedLabels) {
+                        if (intersect(box, other)) { collision = true; break; }
+                    }
+                    if (collision) continue;
+
+                    // 2. Check against ALL points
+                    // We must avoid covering any point, including our own (though offsets usually handle own)
+                    for (const pb of pointBoxes) {
+                        if (intersect(box, pb)) { collision = true; break; }
+                    }
+                    if (collision) continue;
+
+                    // 3. Optional: Check chart bounds?
+                    // Allowing slightly out of bounds for now, as Plotly handles clipping.
+
+                    // Accepted
+                    placedLabels.push(box);
+                    results.set(p.id, pos.name);
+                    break; // Stop trying positions for this point
                 }
-                if (collision) continue;
-
-                // 2. Check against ALL points (except self - theoretically self point is below label)
-                // Actually check all points to be safe. top-center label shouldn't overlap its own point usually.
-                for (const pb of pointBoxes) {
-                    // Overlap with *other* points? Or any point?
-                    // User said "other points". But overlapping own point is bad too (though visually unlikely with top center)
-                    // If label overlaps a point, it's bad.
-                    if (intersect(lb, pb)) { collision = true; break; }
-                }
-                if (collision) continue;
-
-                placedLabels.push(lb);
-                acceptedIds.add(p.id);
             }
 
-            return acceptedIds;
+            return results;
         }
 
         // --- Processing & Rendering ---
@@ -882,27 +961,48 @@
                     }
 
                     // Smart Labeling
-                    const labelsToShow = selectNonOverlappingLabels(rawPoints, xRange, yRange);
+                    const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange);
 
                     // Deconstruct for Plotly
-                    const x = [], y = [], hovertext = [], displayLabels = [];
-                    // Sort for drawing order (not strictly needed but good)
+                    // Group by Organization
+                    const orgGroups = {};
                     rawPoints.forEach(p => {
-                        x.push(p.x);
-                        y.push(p.y);
-                        hovertext.push(p.name);
-                        displayLabels.push(labelsToShow.has(p.id) ? p.name : '');
+                        const org = getOrganization(p.name);
+                        if (!orgGroups[org]) orgGroups[org] = [];
+                        orgGroups[org].push(p);
                     });
 
-                    plotData.push({
-                        x, y,
-                        hovertext: hovertext,
-                        text: displayLabels,
-                        mode: 'markers+text', type: 'scatter', name: 'Models',
-                        textposition: 'top center',
-                        textfont: { size: 10, color: '#4b5563', weight: 600 },
-                        marker: { color: '#6366f1', size: 9, line: { width: 1, color: 'white' }, opacity: 0.85 },
-                        hovertemplate: '<b>%{hovertext}</b><br>Fixed: %{x:.1f}<br>Refit: %{y:.1f}<extra></extra>'
+                    // Create Traces for each organization
+                    Object.keys(orgGroups).sort().forEach(org => {
+                        const points = orgGroups[org];
+                        const x = [], y = [], hovertext = [], displayLabels = [], textPositions = [];
+
+                        points.forEach(p => {
+                            x.push(p.x);
+                            y.push(p.y);
+                            hovertext.push(p.name);
+                            const pos = labelPositions.get(p.id);
+                            displayLabels.push(pos ? p.name : '');
+                            textPositions.push(pos || 'top center');
+                        });
+
+                        plotData.push({
+                            x, y,
+                            hovertext: hovertext,
+                            text: displayLabels,
+                            mode: 'markers+text',
+                            type: 'scatter',
+                            name: org,
+                            textposition: textPositions,
+                            textfont: { size: 10, color: '#4b5563', weight: 600 },
+                            marker: {
+                                color: ORG_COLORS[org] || ORG_COLORS['Other'],
+                                size: 9,
+                                line: { width: 1, color: 'white' },
+                                opacity: 0.85
+                            },
+                            hovertemplate: '<b>%{hovertext}</b><br>Fixed: %{x:.1f}<br>Refit: %{y:.1f}<extra></extra>'
+                        });
                     });
 
                     layout.title.text = 'Comparison: Fixed vs. Refit ECI';
@@ -979,28 +1079,50 @@
                         layout.yaxis.range = yRange;
                     }
 
-                    const labelsToShow = selectNonOverlappingLabels(rawPoints, xRange, yRange);
+                    const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange);
 
                     //Sort by date for line connection if we wanted lines (here strictly markers)
                     rawPoints.sort((a, b) => a.x - b.x);
 
-                    const x = [], y = [], hovertext = [], displayLabels = [];
+                    // Group by Organization
+                    const orgGroups = {};
                     rawPoints.forEach(p => {
-                        x.push(p.dateStr); // Plotly needs string for Date axis
-                        y.push(p.y);
-                        hovertext.push(p.name);
-                        displayLabels.push(labelsToShow.has(p.id) ? p.name : '');
+                        const org = getOrganization(p.name);
+                        if (!orgGroups[org]) orgGroups[org] = [];
+                        orgGroups[org].push(p);
                     });
 
-                    plotData.push({
-                        x, y,
-                        hovertext: hovertext, // Explicit hover text
-                        text: displayLabels,
-                        mode: 'markers+text', type: 'scatter', name: isFixed ? 'Fixed Params' : 'Refit Params',
-                        textposition: 'top center',
-                        textfont: { size: 10, color: isFixed ? '#6366f1' : '#f43f5e', weight: 600 },
-                        marker: { color: isFixed ? '#6366f1' : '#f43f5e', size: 10, line: { width: 1.5, color: 'white' }, opacity: 0.9 },
-                        hovertemplate: '<b>%{hovertext}</b><br>Date: %{x}<br>ECI: %{y:.2f}<extra></extra>'
+                    // Create Traces
+                    Object.keys(orgGroups).sort().forEach(org => {
+                        const points = orgGroups[org];
+                        const x = [], y = [], hovertext = [], displayLabels = [], textPositions = [];
+
+                        points.forEach(p => {
+                            x.push(p.dateStr);
+                            y.push(p.y);
+                            hovertext.push(p.name);
+                            const pos = labelPositions.get(p.id);
+                            displayLabels.push(pos ? p.name : '');
+                            textPositions.push(pos || 'top center');
+                        });
+
+                        plotData.push({
+                            x, y,
+                            hovertext: hovertext,
+                            text: displayLabels,
+                            mode: 'markers+text',
+                            type: 'scatter',
+                            name: org,
+                            textposition: textPositions,
+                            textfont: { size: 10, color: isFixed ? '#4b5563' : '#4b5563', weight: 600 },
+                            marker: {
+                                color: ORG_COLORS[org] || ORG_COLORS['Other'],
+                                size: 10,
+                                line: { width: 1.5, color: 'white' },
+                                opacity: 0.9
+                            },
+                            hovertemplate: '<b>%{hovertext}</b><br>Date: %{x}<br>ECI: %{y:.2f}<extra></extra>'
+                        });
                     });
 
                 }
@@ -1117,8 +1239,9 @@
                 }
 
                 // Default selection
+                // Default selection (Math)
                 Object.keys(RAW_DATA.benchmarks).forEach(id => {
-                    if (['MMLU', 'GPQA diamond'].some(k => RAW_DATA.benchmarks[id].name.includes(k))) {
+                    if (RAW_DATA.benchmarks[id].domain === 'Math') {
                         state.selectedBenchmarks.add(id);
                     }
                 });
