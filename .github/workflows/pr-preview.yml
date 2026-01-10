@@ -29,3 +29,4 @@ jobs:
           source-dir: .
           preview-branch: gh-pages
           umbrella-dir: pr-preview
+          custom-url: https://yafah.net
