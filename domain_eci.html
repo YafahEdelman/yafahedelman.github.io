@@ -91,15 +91,24 @@
     </style>
 </head>
 
-<body class="bg-gray-50 text-gray-900 h-screen flex flex-col">
+<body class="bg-gray-50 text-gray-900 h-dvh flex flex-col">
 
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
-        <div>
-            <h1 class="text-xl font-bold text-gray-800">Domain-ECI Explorer</h1>
-            <p class="text-sm text-gray-500">Select benchmarks to estimate capability over time</p>
+    <header class="bg-white border-b border-gray-200 px-4 lg:px-6 py-4 flex justify-between items-center shadow-sm z-10 relative">
+        <div class="flex items-center gap-3">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-md">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+            <div>
+                <h1 class="text-lg lg:text-xl font-bold text-gray-800">Domain-ECI Explorer</h1>
+                <p class="hidden lg:block text-sm text-gray-500">Select benchmarks to estimate capability over time</p>
+            </div>
         </div>
-        <div class="flex items-center gap-4">
+
+        <!-- Desktop Controls -->
+        <div class="hidden lg:flex items-center gap-4">
             <div class="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                 <button id="mode-fixed"
                     class="px-3 py-1.5 rounded-md text-sm font-medium transition-all shadow-sm bg-white text-gray-900 border border-gray-200">
@@ -128,123 +137,132 @@
     </header>
 
     <!-- Main Content -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- Mobile Overlay -->
+        <div id="sidebar-overlay" class="absolute inset-0 bg-gray-900/50 z-20 hidden lg:hidden backdrop-blur-sm transition-opacity opacity-0"></div>
 
         <!-- Sidebar: Search & Filter -->
-        <aside
-            class="w-80 bg-white border-r border-gray-200 flex flex-col z-0 transition-all duration-300 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]">
-            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
-                <h2 class="font-black text-gray-800 tracking-tight text-base">Filters</h2>
-                <span id="benchmark-count"
-                    class="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full ring-1 ring-indigo-100/50">0/0</span>
+        <aside id="sidebar"
+            class="fixed inset-y-0 left-0 w-80 bg-white border-r border-gray-200 flex flex-col z-30 transition-transform duration-300 transform -translate-x-full lg:relative lg:translate-x-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:shadow-none">
+
+            <!-- Mobile Close Button (Fixed at Top) -->
+            <div class="lg:hidden flex-none border-b border-gray-100 px-5 py-4 flex justify-between items-center bg-white z-20">
+                <h2 class="font-bold text-gray-800">Settings</h2>
+                <button id="sidebar-close-btn" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
             </div>
 
-            <!-- Min Scores Selector -->
-            <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/30">
-                <div class="flex justify-between items-center mb-2">
-                    <label for="min-benchmarks" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Min
-                        Scores</label>
-                    <span id="min-benchmarks-val"
-                        class="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded shadow-sm ring-1 ring-gray-100">2</span>
+            <!-- Scrollable Content Container -->
+            <div class="flex-1 overflow-y-auto lg:overflow-hidden lg:flex lg:flex-col">
+
+                <!-- Mobile Controls (Scrollable) -->
+                <div class="lg:hidden p-4 space-y-4 border-b border-gray-200 bg-gray-50">
+                     <div class="flex flex-col space-y-1 bg-white p-1 rounded-lg border border-gray-200">
+                        <button id="mobile-mode-fixed" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Fixed Parameters</button>
+                        <button id="mobile-mode-refit" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Refit (JMLE)</button>
+                        <button id="mobile-mode-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Compare</button>
+                     </div>
+
+                     <div class="flex items-center justify-between">
+                         <span class="text-sm font-medium text-gray-700">Show 90% CI</span>
+                         <input type="checkbox" id="mobile-show-ci-toggle" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
+                     </div>
+
+                     <button id="mobile-download-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Export Data
+                     </button>
                 </div>
-                <div class="relative w-full h-6 flex items-center">
-                    <!-- Custom Ticks (Dots) on Track -->
-                    <div class="absolute w-full h-1 top-1/2 -translate-y-1/2 pointer-events-none px-[8px]">
-                        <!-- 1 (0%) -->
-                        <div
-                            class="absolute left-[0%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+
+                <!-- Filters (Static on Desktop, Scrollable on Mobile) -->
+                <div class="flex-none">
+                    <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
+                        <h2 class="font-black text-gray-800 tracking-tight text-base">Filters</h2>
+                        <span id="benchmark-count" class="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full ring-1 ring-indigo-100/50">0/0</span>
+                    </div>
+
+                    <!-- Min Scores Selector -->
+                    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/30">
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="min-benchmarks" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Min Scores</label>
+                            <span id="min-benchmarks-val" class="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded shadow-sm ring-1 ring-gray-100">2</span>
                         </div>
-                        <!-- 2 (6.66%) -->
-                        <div
-                            class="absolute left-[6.66%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div class="relative w-full h-6 flex items-center">
+                            <!-- Custom Ticks (Dots) on Track -->
+                            <div class="absolute w-full h-1 top-1/2 -translate-y-1/2 pointer-events-none px-[8px]">
+                                <div class="absolute left-[0%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                                <div class="absolute left-[6.66%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                                <div class="absolute left-[20%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                                <div class="absolute left-[46.66%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                                <div class="absolute left-[100%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                            </div>
+                            <input type="range" id="min-benchmarks" min="1" max="16" value="2" step="1" class="w-full relative z-20 bg-transparent">
                         </div>
-                        <!-- 4 (20%) -->
-                        <div
-                            class="absolute left-[20%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
-                        </div>
-                        <!-- 8 (46.66%) -->
-                        <div
-                            class="absolute left-[46.66%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
-                        </div>
-                        <!-- 16 (100%) -->
-                        <div
-                            class="absolute left-[100%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full">
+                        <div class="relative w-full h-2 mt-1 px-[8px] pointer-events-none">
+                            <div class="absolute left-[0%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                            <div class="absolute left-[6.66%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                            <div class="absolute left-[20%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                            <div class="absolute left-[46.66%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                            <div class="absolute left-[100%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
                         </div>
                     </div>
 
-                    <input type="range" id="min-benchmarks" min="1" max="16" value="2" step="1"
-                        class="w-full relative z-20 bg-transparent">
-                </div>
-                <div class="relative w-full h-2 mt-1 px-[8px] pointer-events-none">
-                    <div class="absolute left-[0%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
-                    <div class="absolute left-[6.66%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
-                    <div class="absolute left-[20%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
-                    <div class="absolute left-[46.66%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
-                    <div class="absolute left-[100%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
-                </div>
-            </div>
+                    <!-- Domain Selection Dropdown -->
+                    <div class="px-5 py-3 border-b border-gray-100">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Category</h3>
+                            <button id="clear-domains" class="text-[10px] text-indigo-600 font-bold hover:text-indigo-700 transition-colors hidden">CLEAR</button>
+                        </div>
+                        <div class="relative">
+                            <select id="domain-selector" class="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer">
+                                <!-- Options will be injected here -->
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
 
-            <!-- Domain Selection Dropdown -->
-            <div class="px-5 py-3 border-b border-gray-100">
-                <div class="flex justify-between items-center mb-2">
-                    <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Category</h3>
-                    <button id="clear-domains"
-                        class="text-[10px] text-indigo-600 font-bold hover:text-indigo-700 transition-colors hidden">CLEAR</button>
-                </div>
-                <div class="relative">
-                    <select id="domain-selector"
-                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer">
-                        <!-- Options will be injected here -->
-                    </select>
-                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
+                    <!-- Search Section -->
+                    <div class="px-5 py-3 border-b border-gray-100">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Search Benchmarks</h3>
+                        </div>
+                        <div class="relative group">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 group-focus-within:text-indigo-500 transition-colors">
+                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </span>
+                            <input type="text" id="search-benchmarks" placeholder="Find benchmarks..." class="w-full pl-9 pr-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all">
+                        </div>
+                    </div>
+
+                    <!-- Active Labels/Filters Area -->
+                    <div id="active-filters-container" class="px-5 py-3 border-b border-gray-100 hidden bg-indigo-50/10">
+                        <h3 class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-2 font-black">Selection</h3>
+                        <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar" id="active-filters">
+                            <!-- Filter tags will be injected here -->
+                        </div>
+                    </div>
+
+                    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center sticky top-0 backdrop-blur-sm z-10">
+                        <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Benchmarks</h2>
+                        <div class="flex gap-2">
+                            <button id="select-all" class="text-indigo-600 text-[10px] font-bold hover:text-indigo-800 transition-colors tracking-tight">ALL</button>
+                            <span class="text-gray-300 text-[10px]">|</span>
+                            <button id="deselect-all" class="text-gray-400 text-[10px] font-bold hover:text-gray-600 transition-colors tracking-tight">NONE</button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Search Section (Moved Down) -->
-            <div class="px-5 py-3 border-b border-gray-100">
-                <div class="flex justify-between items-center mb-2">
-                    <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Search Benchmarks</h3>
+                <!-- Benchmark List (Scrollable on Desktop independently) -->
+                <div class="lg:flex-1 lg:overflow-y-auto px-5 py-2 space-y-1 bg-white custom-scrollbar pb-8" id="benchmark-list">
+                    <!-- Benchmarks list will be injected here -->
                 </div>
-                <div class="relative group">
-                    <span
-                        class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 group-focus-within:text-indigo-500 transition-colors">
-                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                    </span>
-                    <input type="text" id="search-benchmarks" placeholder="Find benchmarks..."
-                        class="w-full pl-9 pr-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all">
-                </div>
-            </div>
-
-            <!-- Active Labels/Filters Area -->
-            <div id="active-filters-container" class="px-5 py-3 border-b border-gray-100 hidden bg-indigo-50/10">
-                <h3 class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-2 font-black">Selection
-                </h3>
-                <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar" id="active-filters">
-                    <!-- Filter tags will be injected here -->
-                </div>
-            </div>
-
-            <div
-                class="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center sticky top-0 backdrop-blur-sm z-10">
-                <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Benchmarks</h2>
-                <div class="flex gap-2">
-                    <button id="select-all"
-                        class="text-indigo-600 text-[10px] font-bold hover:text-indigo-800 transition-colors tracking-tight">ALL</button>
-                    <span class="text-gray-300 text-[10px]">|</span>
-                    <button id="deselect-all"
-                        class="text-gray-400 text-[10px] font-bold hover:text-gray-600 transition-colors tracking-tight">NONE</button>
-                </div>
-            </div>
-
-            <div class="flex-1 overflow-y-auto px-5 py-2 space-y-1 bg-white custom-scrollbar" id="benchmark-list">
-                <!-- Benchmarks list will be injected here -->
             </div>
         </aside>
 
@@ -258,11 +276,11 @@
                 </div>
             </div>
 
-            <div class="flex-1 p-6" id="chart-container">
+            <div class="flex-1 p-2 lg:p-6" id="chart-container">
                 <!-- Plotly Chart -->
             </div>
 
-            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex justify-between">
+            <div class="px-4 lg:px-6 py-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex justify-between">
                 <span id="status-text">Ready.</span>
                 <span>Select benchmarks to update the graph.</span>
             </div>
@@ -876,21 +894,30 @@
                     // Collision Check
                     let collision = false;
 
-                    // 1. Check against accepted labels
-                    for (const other of placedLabels) {
-                        if (intersect(box, other)) { collision = true; break; }
+                    // 0. Boundary Check
+                    // If label goes outside the chart area (0-1), discard this position.
+                    // If all positions fail, the label is not placed (hidden).
+                    if (box.l < 0 || box.r > 1 || box.b < 0 || box.t > 1) {
+                        collision = true;
+                        // Do not continue inner loop here, checking bounds is fatal for this position
                     }
-                    if (collision) continue;
 
-                    // 2. Check against ALL points
-                    // We must avoid covering any point, including our own (though offsets usually handle own)
-                    for (const pb of pointBoxes) {
-                        if (intersect(box, pb)) { collision = true; break; }
+                    if (!collision) {
+                        // 1. Check against accepted labels
+                        for (const other of placedLabels) {
+                            if (intersect(box, other)) { collision = true; break; }
+                        }
                     }
-                    if (collision) continue;
 
-                    // 3. Optional: Check chart bounds?
-                    // Allowing slightly out of bounds for now, as Plotly handles clipping.
+                    if (!collision) {
+                        // 2. Check against ALL points
+                        // We must avoid covering any point, including our own (though offsets usually handle own)
+                        for (const pb of pointBoxes) {
+                            if (intersect(box, pb)) { collision = true; break; }
+                        }
+                    }
+
+                    if (collision) continue;
 
                     // Accepted
                     placedLabels.push(box);
@@ -919,14 +946,24 @@
 
             try {
                 const plotData = [];
+                const isMobile = window.innerWidth < 1024;
                 let layout = {
-                    title: { text: 'Model Capability (ECI) over Time', font: { family: 'Inter', size: 22, weight: 900, color: '#111827' } },
+                    title: {
+                        text: 'Model Capability (ECI) over Time',
+                        font: { family: 'Inter', size: isMobile ? 16 : 22, weight: 900, color: '#111827' }
+                    },
                     xaxis: { title: { text: 'Release Date', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     yaxis: { title: { text: 'Domain-specific ECI', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     hovermode: 'closest',
                     template: 'plotly_white',
-                    margin: { t: 90, r: 50, l: 80, b: 100 },
-                    legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center', font: { size: 13, weight: 500 } },
+                    margin: isMobile ? { t: 60, r: 10, l: 40, b: 80 } : { t: 90, r: 50, l: 80, b: 100 },
+                    legend: {
+                        orientation: 'h',
+                        y: isMobile ? -0.2 : -0.15,
+                        x: 0.5,
+                        xanchor: 'center',
+                        font: { size: isMobile ? 10 : 13, weight: 500 }
+                    },
                     font: { family: 'Inter, sans-serif' }
                 };
 
@@ -1431,25 +1468,54 @@
                 }
 
                 // Export functionality
-                const exportBtn = document.getElementById('download-btn');
-                if (exportBtn) {
-                    exportBtn.addEventListener('click', exportData);
-                }
+                const handleExport = () => exportData();
+                ['download-btn', 'mobile-download-btn'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('click', handleExport);
+                });
 
                 // Mode switching
-                const btns = ['mode-fixed', 'mode-refit', 'mode-compare'];
-                btns.forEach(bid => {
-                    const el = document.getElementById(bid);
-                    if (el) {
-                        el.addEventListener('click', (e) => {
-                            const buttons = btns.map(id => document.getElementById(id)).filter(Boolean);
-                            buttons.forEach(b => b.className = "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-900 transition-all");
-                            e.target.className = "px-4 py-2 rounded-xl text-sm font-black bg-white text-indigo-600 shadow-sm border border-indigo-100 ring-4 ring-indigo-50";
-                            state.mode = bid.replace('mode-', '');
-                            updateChart();
-                        });
-                    }
+                const modes = ['fixed', 'refit', 'compare'];
+
+                function updateModeUI(selectedMode) {
+                    modes.forEach(m => {
+                        // Desktop
+                        const dBtn = document.getElementById(`mode-${m}`);
+                        if (dBtn) {
+                             if (m === selectedMode) {
+                                dBtn.className = "px-3 py-1.5 rounded-md text-sm font-medium transition-all shadow-sm bg-white text-gray-900 border border-gray-200";
+                             } else {
+                                dBtn.className = "px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all";
+                             }
+                        }
+                        // Mobile
+                        const mBtn = document.getElementById(`mobile-mode-${m}`);
+                        if (mBtn) {
+                            if (m === selectedMode) {
+                                mBtn.className = "px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-indigo-50 text-indigo-700 border border-indigo-200";
+                            } else {
+                                mBtn.className = "px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50";
+                            }
+                        }
+                    });
+                }
+
+                modes.forEach(m => {
+                    ['mode-', 'mobile-mode-'].forEach(prefix => {
+                        const el = document.getElementById(prefix + m);
+                        if (el) {
+                            el.addEventListener('click', () => {
+                                state.mode = m;
+                                updateModeUI(m);
+                                updateChart();
+                                if (window.innerWidth < 1024) toggleSidebar(false); // Close sidebar on mobile selection
+                            });
+                        }
+                    });
                 });
+
+                // Initialize UI state
+                updateModeUI(state.mode);
 
                 // Bulk actions
                 const selectAll = document.getElementById('select-all');
@@ -1491,13 +1557,50 @@
                 }
 
                 // Show CI toggle
-                const ciToggle = document.getElementById('show-ci-toggle');
-                if (ciToggle) {
-                    ciToggle.addEventListener('change', (e) => {
-                        state.showCI = e.target.checked;
-                        updateChart();
-                    });
+                function toggleCI(checked) {
+                    state.showCI = checked;
+                    const dToggle = document.getElementById('show-ci-toggle');
+                    if (dToggle) dToggle.checked = checked;
+                    const mToggle = document.getElementById('mobile-show-ci-toggle');
+                    if (mToggle) mToggle.checked = checked;
+                    updateChart();
                 }
+
+                const ciToggle = document.getElementById('show-ci-toggle');
+                if (ciToggle) ciToggle.addEventListener('change', (e) => toggleCI(e.target.checked));
+
+                const mobCiToggle = document.getElementById('mobile-show-ci-toggle');
+                if (mobCiToggle) mobCiToggle.addEventListener('change', (e) => toggleCI(e.target.checked));
+
+                // Mobile Sidebar Logic
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+                const menuBtn = document.getElementById('mobile-menu-btn');
+                const closeBtn = document.getElementById('sidebar-close-btn');
+
+                function toggleSidebar(show) {
+                    if (show) {
+                        sidebar.classList.remove('-translate-x-full');
+                        overlay.classList.remove('hidden');
+                        // Small delay for opacity transition
+                        setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+                    } else {
+                        sidebar.classList.add('-translate-x-full');
+                        overlay.classList.add('opacity-0');
+                        setTimeout(() => overlay.classList.add('hidden'), 300);
+                    }
+                }
+
+                if (menuBtn) menuBtn.addEventListener('click', () => toggleSidebar(true));
+                if (closeBtn) closeBtn.addEventListener('click', () => toggleSidebar(false));
+                if (overlay) overlay.addEventListener('click', () => toggleSidebar(false));
+
+                // Resize listener
+                let resizeTimer;
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => updateChart(), 200);
+                });
 
                 // Initial Render
                 if (status) status.innerText = "Rendering filters...";
