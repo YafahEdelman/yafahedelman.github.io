@@ -1225,7 +1225,14 @@
                 const isSorted = state.sortColumn === col.key;
                 const dir = state.sortDirection === 'asc' ? '▲' : '▼';
 
-                th.innerHTML = `${text} ${isSorted ? `<span class="text-indigo-600 ml-1">${dir}</span>` : ''}`;
+                let indicator = '';
+                if (isSorted) {
+                    indicator = `<span class="text-indigo-600 ml-1">${dir}</span>`;
+                } else {
+                    indicator = `<span class="text-gray-300 ml-1">↕</span>`;
+                }
+
+                th.innerHTML = `${text} ${indicator}`;
                 th.onclick = () => handleSort(col.key);
                 tableHeader.appendChild(th);
             });
