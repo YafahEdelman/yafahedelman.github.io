@@ -165,7 +165,8 @@ Important:
 - Dates are strings like "YYYY-MM-DD". Convert to Dates if plotting time.
 - Numeric fields might be string representations or null. Filter/Convert them.
 - Use Log scale if range is huge (e.g. FLOP).
-- The function should take NO arguments (it uses the global variable).
+- The function MUST be named \`getChartConfig\` and take NO arguments.
+- Do NOT assume \`data\` or \`RAW_DATA\` variables exist as arguments.
 `;
 
                 const response = await fetch('https://text.pollinations.ai/', {
@@ -198,6 +199,13 @@ Important:
                 // Execution
                 const runner = new Function(text + `
                     try {
+                        if (typeof getChartConfig !== 'function') {
+                             throw new Error("getChartConfig function is not defined.");
+                        }
+                        // Check if function expects arguments, which implies a misunderstanding by AI
+                        if (getChartConfig.length > 0) {
+                            console.warn("AI generated function expects arguments, but none will be passed. Attempting to run anyway.");
+                        }
                         return getChartConfig();
                     } catch(e) {
                         throw new Error("Runtime Error in generated code: " + e.message);
