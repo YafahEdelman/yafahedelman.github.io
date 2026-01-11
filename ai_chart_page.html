@@ -6,7 +6,8 @@
     <title>Epoch AI Data Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="data.js"></script>
+    <!-- Use datasets.js instead of data.js -->
+    <script src="datasets.js"></script>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
 
@@ -45,8 +46,11 @@
                 <span class="text-xs text-gray-500 font-medium py-1">Try:</span>
                 <button class="quick-prompt text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">Compute over Time</button>
                 <button class="quick-prompt text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">Parameters vs Date</button>
-                <button class="quick-prompt text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">Models by Organization</button>
-                <button class="quick-prompt text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">Compute Cost vs Date</button>
+                <button class="quick-prompt text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">Benchmarks: ECI Score vs Release Date</button>
+                <button class="quick-prompt text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">Chip Sales Over Time</button>
+            </div>
+            <div class="mt-2 text-xs text-gray-400">
+                Available Datasets: <span id="dataset-list" class="font-mono">Loading...</span>
             </div>
         </div>
 
@@ -69,6 +73,7 @@
         const statusArea = document.getElementById('status-area');
         const btnText = document.getElementById('btn-text');
         const btnSpinner = document.getElementById('btn-spinner');
+        const datasetListEl = document.getElementById('dataset-list');
 
         generateBtn.addEventListener('click', () => generateChart(promptInput.value));
 
@@ -78,6 +83,14 @@
                 generateChart(btn.innerText);
             });
         });
+
+        // Initialize Dataset List Display
+        if (window.EPOCH_DATASETS) {
+            const names = Object.keys(window.EPOCH_DATASETS);
+            datasetListEl.textContent = names.join(', ');
+        } else {
+            datasetListEl.textContent = "Error loading datasets.";
+        }
 
         function showStatus(message, type = 'info') {
             statusArea.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'border-red-200', 'bg-blue-50', 'text-blue-700', 'border-blue-200', 'bg-green-50', 'text-green-700', 'border-green-200');
@@ -114,36 +127,45 @@
             }
 
             setLoading(true);
-            showStatus('Analyzing request and generating code...', 'info');
+            showStatus('Selecting dataset and generating code...', 'info');
 
             try {
-                // Peek at data structure for prompt
-                const sampleData = RAW_DATA.slice(0, 3);
-                const keys = Object.keys(sampleData[0] || {});
+                // Prepare context about available datasets
+                const datasetNames = Object.keys(window.EPOCH_DATASETS);
+                const schemas = window.DATASET_SCHEMAS || {};
 
+                // Construct a summary of datasets for the AI to choose from
+                // Limiting keys to first 25 to avoid token limits if many cols
+                let schemaSummary = "";
+                for (const [name, keys] of Object.entries(schemas)) {
+                    schemaSummary += `- ${name}: ${keys.slice(0, 25).join(', ')}${keys.length > 25 ? '...' : ''}\n`;
+                }
+
+                // Step 1: Ask AI to choose dataset and write code
                 const prompt = `
 You are a JavaScript Expert specializing in Data Visualization with Plotly.js.
-You have access to a global variable \`RAW_DATA\` which is an Array of Objects.
+You have access to a global object \`window.EPOCH_DATASETS\` containing multiple datasets.
 
-Data Sample (First 3 items):
-${JSON.stringify(sampleData, null, 2)}
-
-Keys available: ${keys.join(', ')}
+Available Datasets and their Schema (Keys):
+${schemaSummary}
 
 User Request: "${userRequest}"
 
 Task:
-Write a JavaScript function named \`getChartConfig(data)\` that:
-1. Filters and processes the input \`data\` array to fulfill the user request.
-2. Returns an object \`{ data: [...], layout: {...} }\` compatible with \`Plotly.newPlot\`.
-3. Handles empty or missing values gracefully (e.g. filter out entries where x or y is missing).
-4. Creates a professional, clean chart.
-5. Returns ONLY valid JavaScript code. NO markdown blocks (like \`\`\`javascript), NO explanations.
+1. Identify the most appropriate dataset from the list above.
+2. Write a JavaScript function named \`getChartConfig()\` that:
+    - Accesses the chosen dataset via \`window.EPOCH_DATASETS['Dataset Name']\`.
+    - Filters and processes the data to fulfill the user request.
+    - Returns an object \`{ data: [...], layout: {...} }\` compatible with \`Plotly.newPlot\`.
+    - Handles empty or missing values gracefully.
+    - Creates a professional, clean chart.
+    - Returns ONLY valid JavaScript code. NO markdown blocks (like \`\`\`javascript), NO explanations.
 
 Important:
 - Dates are strings like "YYYY-MM-DD". Convert to Dates if plotting time.
-- Numeric fields (FLOP, Parameters) might be null/undefined. Filter them.
-- Use Log scale for Compute or Parameters if the range is huge.
+- Numeric fields might be string representations or null. Filter/Convert them.
+- Use Log scale if range is huge (e.g. FLOP).
+- The function should take NO arguments (it uses the global variable).
 `;
 
                 const response = await fetch('https://text.pollinations.ai/', {
@@ -152,7 +174,7 @@ Important:
                     body: JSON.stringify({
                         messages: [{ role: 'user', content: prompt }],
                         model: 'openai',
-                        jsonMode: false // Pollinations doesn't strictly enforce jsonMode yet
+                        jsonMode: false
                     })
                 });
 
@@ -163,31 +185,26 @@ Important:
                 // Sanitization
                 text = text.replace(/```javascript/g, '').replace(/```/g, '').trim();
 
-                // Sometimes AI adds explanations before/after code. We try to extract the function.
-                // A simple regex to find the function block might help, or just eval.
-                // Given the instructions, we hope for clean code.
-
                 console.log("Generated Code:\n", text);
 
                 if (!text.includes('function getChartConfig')) {
-                     // Attempt to wrap if it looks like just the body
                      if (text.includes('return {')) {
-                         text = `function getChartConfig(data) { ${text} }`;
+                         text = `function getChartConfig() { ${text} }`;
                      } else {
                          throw new Error("AI did not return a valid function.");
                      }
                 }
 
                 // Execution
-                const runner = new Function('data', text + `
+                const runner = new Function(text + `
                     try {
-                        return getChartConfig(data);
+                        return getChartConfig();
                     } catch(e) {
                         throw new Error("Runtime Error in generated code: " + e.message);
                     }
                 `);
 
-                const result = runner(RAW_DATA);
+                const result = runner();
 
                 if (!result || !result.data) {
                     throw new Error("Generated code returned invalid Plotly object.");
@@ -208,11 +225,11 @@ Important:
             }
         }
 
-        // Initial load check
-        if (typeof RAW_DATA === 'undefined') {
-            showStatus('Error: Data file not loaded. Check "data.js".', 'error');
+        // Initial check
+        if (!window.EPOCH_DATASETS) {
+            showStatus('Error: Data file not loaded. Check "datasets.js".', 'error');
         } else {
-            console.log(`Loaded ${RAW_DATA.length} records.`);
+            console.log(`Loaded datasets: ${Object.keys(window.EPOCH_DATASETS).join(', ')}`);
             // Auto-generate a simple one to start
             generateChart("Plot Training Compute (FLOP) vs Publication Date");
         }
