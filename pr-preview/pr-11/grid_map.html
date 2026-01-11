@@ -60,6 +60,24 @@
                     </div>
                 </div>
 
+                <div class="mt-4 border-t pt-4">
+                    <h3 class="font-semibold mb-2 text-sm text-gray-700">Filter by Capacity (MW)</h3>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" id="min-capacity" placeholder="Min" class="w-20 p-1 border rounded text-sm">
+                        <span class="text-gray-500">-</span>
+                        <input type="number" id="max-capacity" placeholder="Max" class="w-20 p-1 border rounded text-sm">
+                    </div>
+                </div>
+
+                <div class="mt-4 border-t pt-4">
+                    <h3 class="font-semibold mb-2 text-sm text-gray-700">Filter by Year</h3>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" id="min-year" placeholder="Min" class="w-20 p-1 border rounded text-sm">
+                        <span class="text-gray-500">-</span>
+                        <input type="number" id="max-year" placeholder="Max" class="w-20 p-1 border rounded text-sm">
+                    </div>
+                </div>
+
 
                 <!-- Stats -->
                 <div class="pt-4 border-t">
@@ -123,6 +141,12 @@
             let currentData = [...allData];
             let typeFilters = new Set();
 
+            // Inputs
+            const minCapacityInput = document.getElementById('min-capacity');
+            const maxCapacityInput = document.getElementById('max-capacity');
+            const minYearInput = document.getElementById('min-year');
+            const maxYearInput = document.getElementById('max-year');
+
             // --- Logic ---
 
             function getStatusColor(status) {
@@ -150,11 +174,6 @@
                 let hasPoints = false;
 
                 currentData.forEach(project => {
-                    // Filter check
-                    if (typeFilters.size > 0 && !typeFilters.has(project.Type)) {
-                        return;
-                    }
-
                     const lat = parseFloat(project.Latitude);
                     const lon = parseFloat(project.Longitude);
 
@@ -204,9 +223,6 @@
                 // Get unique types
                 const types = [...new Set(allData.map(d => d.Type).filter(Boolean))].sort();
 
-                // Initially select all
-                // types.forEach(t => typeFilters.add(t)); // Optional: start with all selected or none (logic assumes empty set = all)
-
                 types.forEach(type => {
                     const div = document.createElement('div');
                     div.className = 'flex items-center';
@@ -218,10 +234,6 @@
                     checkbox.className = 'h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded';
 
                     checkbox.addEventListener('change', (e) => {
-                         // If checked, add to set. If unchecked, remove.
-                         // Wait, logic: if empty set, show all? No, typical filter logic is usually "show checked".
-                         // Let's make typeFilters hold only CHECKED items.
-
                          updateFiltersFromUI();
                     });
 
@@ -233,9 +245,34 @@
                     div.appendChild(label);
                     container.appendChild(div);
                 });
+            }
 
-                // Initialize the set with all types
-                updateFiltersFromUI();
+            function initRangeFilters() {
+                // Calculate Min/Max for Capacity
+                const capacities = allData.map(d => parseFloat(d["Capacity (MW)"])).filter(n => !isNaN(n));
+                if (capacities.length > 0) {
+                    const minCap = Math.floor(Math.min(...capacities));
+                    const maxCap = Math.ceil(Math.max(...capacities));
+                    minCapacityInput.placeholder = minCap;
+                    maxCapacityInput.placeholder = maxCap;
+                }
+
+                // Calculate Min/Max for Year
+                const years = allData.map(d => parseInt(d["Year"])).filter(n => !isNaN(n));
+                if (years.length > 0) {
+                    const minYear = Math.min(...years);
+                    const maxYear = Math.max(...years);
+                    minYearInput.placeholder = minYear;
+                    maxYearInput.placeholder = maxYear;
+                }
+
+                // Event Listeners
+                const inputs = [minCapacityInput, maxCapacityInput, minYearInput, maxYearInput];
+                inputs.forEach(input => {
+                    input.addEventListener('input', () => {
+                        applyFilters();
+                    });
+                });
             }
 
             function updateFiltersFromUI() {
@@ -244,13 +281,43 @@
                 checkboxes.forEach(cb => {
                     if (cb.checked) typeFilters.add(cb.value);
                 });
+                applyFilters();
+            }
+
+            function applyFilters() {
+                // Get range values
+                const minCapVal = parseFloat(minCapacityInput.value);
+                const maxCapVal = parseFloat(maxCapacityInput.value);
+                const minYearVal = parseInt(minYearInput.value);
+                const maxYearVal = parseInt(maxYearInput.value);
+
+                currentData = allData.filter(project => {
+                    // Type Filter
+                    if (typeFilters.size > 0 && !typeFilters.has(project.Type)) {
+                        return false;
+                    }
+
+                    // Capacity Filter
+                    const cap = parseFloat(project["Capacity (MW)"]);
+                    if (!isNaN(minCapVal) && (isNaN(cap) || cap < minCapVal)) return false;
+                    if (!isNaN(maxCapVal) && (isNaN(cap) || cap > maxCapVal)) return false;
+
+                    // Year Filter
+                    const year = parseInt(project["Year"]);
+                    if (!isNaN(minYearVal) && (isNaN(year) || year < minYearVal)) return false;
+                    if (!isNaN(maxYearVal) && (isNaN(year) || year > maxYearVal)) return false;
+
+                    return true;
+                });
+
                 renderMap();
+                updateStats();
             }
 
             // Initial Render
             initFilters();
-            updateStats();
-            renderMap();
+            initRangeFilters();
+            updateFiltersFromUI(); // This triggers applyFilters -> renderMap & updateStats
 
         });
     </script>
