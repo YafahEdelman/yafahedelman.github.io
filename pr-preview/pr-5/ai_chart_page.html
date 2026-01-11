@@ -161,7 +161,10 @@ Return valid JSON with no markdown formatting.
 
                 const response = await fetch('https://text.pollinations.ai/', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer pk_w1ydtl3pBtnBNHuj'
+                    },
                     body: JSON.stringify({
                         messages: [{ role: 'user', content: prompt }],
                         model: 'gpt-4o-mini',
