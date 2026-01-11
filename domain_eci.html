@@ -1291,6 +1291,10 @@
                 if (state.mode === 'compare' || state.mode === 'rank-compare') {
                     loader.classList.remove('hidden');
                     status.innerText = "Computing comparison...";
+
+                    // Hide Breakpoint Stats by default in Compare mode
+                    document.getElementById('breakpoint-stats').classList.add('hidden');
+
                     await new Promise(r => setTimeout(r, 50));
 
                     // 1. Calculate Scores
