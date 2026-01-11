@@ -564,15 +564,20 @@
         }
 
         // --- IRT: Refit Solver (JMLE) ---
-        async function solveJMLE(activeBenchmarkIds, minBenchmarks) {
-            // Prepare data structure: sparse matrix logic
-            // We need: for each model, list of (benchmark_idx, score)
-            //          for each benchmark, list of (model_idx, score)
+
+        // 1. Raw JMLE (Cached)
+        async function computeRawJMLE(activeBenchmarkIds, minBenchmarks) {
+            const sortedBenchmarks = Array.from(activeBenchmarkIds).sort();
+            const cacheKey = sortedBenchmarks.join('|') + '|' + minBenchmarks;
+
+            if (state.cachedRefit && state.cachedRefit.key === cacheKey) {
+                return state.cachedRefit.data;
+            }
 
             const allModels = Object.keys(RAW_DATA.models);
-            const benchmarks = Array.from(activeBenchmarkIds);
+            const benchmarks = sortedBenchmarks;
 
-            if (benchmarks.length === 0) return {};
+            if (benchmarks.length === 0) return null;
 
             // Pre-process links for fast iteration
             const modelData = {}; // model -> [{b_id, p}]
@@ -581,7 +586,6 @@
             const benchData = {}; // bench -> [{m_id, p}]
             benchmarks.forEach(b => benchData[b] = []);
 
-            let totalObsCount = 0;
             allModels.forEach(m => {
                 if (RAW_DATA.performances[m]) {
                     benchmarks.forEach(b => {
@@ -589,22 +593,15 @@
                             const p = RAW_DATA.performances[m][b];
                             modelData[m].push({ b, p });
                             benchData[b].push({ m, p });
-                            totalObsCount++;
                         }
                     });
                 }
             });
 
-            // Filter models by minimum benchmarks
-            console.log("Filtering: Total Models:", allModels.length, "MinBenchmarks:", minBenchmarks);
-            // Debug how many benchmarks each model has
-            // const debug counts = allModels.map(m => modelData[m].length);
-            // console.log("Distribution:", counts.slice(0, 20));
-
+            // Filter models
             const models = allModels.filter(m => modelData[m].length >= (minBenchmarks || 1));
-            console.log("Models after filtering:", models.length);
 
-            if (models.length === 0) return {};
+            if (models.length === 0) return null;
 
             try {
                 // Init parameters
@@ -620,8 +617,6 @@
                     discriminability[b] = 1.0;
                 });
 
-                console.log(`Fitting JMLE on ${models.length} filtered models...`);
-
                 const iterations = 100;
                 const lr = 2.0;
                 const nParams = models.length + benchmarks.length + benchmarks.length;
@@ -629,15 +624,13 @@
                 const regLambda = regStrength / nParams;
 
                 for (let iter = 0; iter < iterations; iter++) {
-                    // 1. Optimize Abilities
+                    // Optimize Abilities
                     models.forEach(m => {
                         const obs = modelData[m];
                         if (obs.length === 0) return;
-
                         let theta = ability[m];
                         for (let k = 0; k < 5; k++) {
-                            let grad = 0;
-                            let w_sum = 0;
+                            let grad = 0, w_sum = 0;
                             obs.forEach(o => {
                                 const d = difficulty[o.b];
                                 const a = discriminability[o.b];
@@ -655,7 +648,7 @@
                         ability[m] = Math.max(-100, Math.min(100, theta));
                     });
 
-                    // 2. Optimize Item Params
+                    // Optimize Item Params
                     benchmarks.forEach(b => {
                         const obs = benchData[b];
                         if (obs.length === 0) return;
@@ -695,72 +688,83 @@
                 models.forEach(m => ability[m] += SHIFT);
                 benchmarks.forEach(b => difficulty[b] += SHIFT);
 
-                // --- Final Scale Alignment (Anchor Method) ---
-                // Hardcoded to avoid ReferenceErrors
-                const ANCHOR_LOW_ID = "Claude 3.5 Sonnet";
-                const ANCHOR_HIGH_ID = "GPT-5";
-                const TARGET_LOW = 130.0;
-                const TARGET_HIGH = 150.0;
+                const result = { ability, difficulty, discriminability, models };
 
-                let finalA = 0;
-                let finalB = 1;
+                // Update Cache
+                state.cachedRefit = { key: cacheKey, data: result };
 
-                function performPopulationNorm() {
-                    let sum = 0, sqSum = 0, n = 0;
-                    models.forEach(m => {
-                        const val = ability[m];
-                        if (val !== undefined) { sum += val; sqSum += val * val; n++; }
-                    });
-                    if (n < 2) return;
-                    const mean = sum / n;
-                    const std = Math.sqrt(sqSum / n - mean * mean);
-                    // Target Mean=100, SD=15
-                    finalB = 15.0 / (std + 1e-9);
-                    finalA = 100.0 - finalB * mean;
-                    console.log(`Fallback: Pop Norm Mean=${mean.toFixed(2)} SD=${std.toFixed(2)}`);
-                }
+                return result;
+            } catch (e) {
+                console.error("JMLE Raw Failed:", e);
+                return null;
+            }
+        }
 
-                if (state.useStdScale) {
-                    if (ability[ANCHOR_LOW_ID] !== undefined && ability[ANCHOR_HIGH_ID] !== undefined) {
-                        const tLow = ability[ANCHOR_LOW_ID];
-                        const tHigh = ability[ANCHOR_HIGH_ID];
-                        const rawDiff = tHigh - tLow;
-                        const targetDiff = TARGET_HIGH - TARGET_LOW;
+        // 2. Scaling Application (Sync)
+        function applyScaling(rawResult) {
+            if (!rawResult) return {};
 
-                        // Compute slope
-                        finalB = targetDiff / rawDiff;
-                        // Compute intercept: Target = A + B * Raw
-                        // A = Target - B * Raw
-                        finalA = TARGET_LOW - finalB * tLow;
+            const { ability, difficulty, discriminability, models } = rawResult;
+            const scaledAbility = { ...ability };
 
-                        console.log(`Anchors: Low(${tLow.toFixed(2)}->${TARGET_LOW}), High(${tHigh.toFixed(2)}->${TARGET_HIGH})`);
-                        console.log(`Params: A=${finalA.toFixed(2)}, B=${finalB.toFixed(2)}`);
+            // Anchors
+            const ANCHOR_LOW_ID = "Claude 3.5 Sonnet";
+            const ANCHOR_HIGH_ID = "GPT-5";
+            const TARGET_LOW = 130.0;
+            const TARGET_HIGH = 150.0;
 
-                        if (Math.abs(rawDiff) < 1.0 || finalB < 0) {
-                            console.warn("Anchors degenerate. Fallback.");
-                            performPopulationNorm();
-                        }
-                    } else {
-                        console.warn("Anchors missing. Fallback.");
+            let finalA = 0;
+            let finalB = 1;
+            let fallbackUsed = false;
+
+            function performPopulationNorm() {
+                let sum = 0, sqSum = 0, n = 0;
+                models.forEach(m => {
+                    const val = ability[m];
+                    if (val !== undefined) { sum += val; sqSum += val * val; n++; }
+                });
+                if (n < 2) return;
+                const mean = sum / n;
+                const std = Math.sqrt(sqSum / n - mean * mean);
+                // Target Mean=100, SD=15
+                finalB = 15.0 / (std + 1e-9);
+                finalA = 100.0 - finalB * mean;
+            }
+
+            if (state.useStdScale) {
+                if (ability[ANCHOR_LOW_ID] !== undefined && ability[ANCHOR_HIGH_ID] !== undefined) {
+                    const tLow = ability[ANCHOR_LOW_ID];
+                    const tHigh = ability[ANCHOR_HIGH_ID];
+                    const rawDiff = tHigh - tLow;
+                    const targetDiff = TARGET_HIGH - TARGET_LOW;
+
+                    finalB = targetDiff / rawDiff;
+                    finalA = TARGET_LOW - finalB * tLow;
+
+                    if (Math.abs(rawDiff) < 1.0 || finalB < 0) {
                         performPopulationNorm();
+                        fallbackUsed = true;
                     }
                 } else {
-                    // Default behavior: Population Norm
                     performPopulationNorm();
+                    fallbackUsed = true;
                 }
-
-                // Apply Match
-                models.forEach(m => {
-                    if (ability[m] !== undefined) ability[m] = finalA + finalB * ability[m];
-                });
-
-                return { ability, difficulty, discriminability, scaling: { a: finalA, b: finalB } };
-
-            } catch (e) {
-                console.error("JMLE Failed:", e);
-                // Return empty to avoid crash
-                return {};
+            } else {
+                performPopulationNorm();
             }
+
+            // Apply
+            models.forEach(m => {
+                if (scaledAbility[m] !== undefined) scaledAbility[m] = finalA + finalB * scaledAbility[m];
+            });
+
+            return { ability: scaledAbility, difficulty, discriminability, scaling: { a: finalA, b: finalB }, fallbackUsed };
+        }
+
+        // Wrapper to maintain API compatibility
+        async function solveJMLE(activeBenchmarkIds, minBenchmarks) {
+            const raw = await computeRawJMLE(activeBenchmarkIds, minBenchmarks);
+            return applyScaling(raw);
         }
 
         // --- Breakpoint Analysis Logic ---
@@ -1256,6 +1260,7 @@
             const status = document.getElementById('status-text');
             const loader = document.getElementById('loading-overlay');
             const activeBenchmarks = Array.from(state.selectedBenchmarks);
+            let fallbackWarning = false;
 
             updateCount();
 
@@ -1330,6 +1335,7 @@
                         }
                     });
                     const refitResult = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                    if (refitResult.fallbackUsed && state.useStdScale) fallbackWarning = true;
                     const refitScores = refitResult.ability || {};
                     const refitDiffs = refitResult.difficulty || {};
                     const refitDiscs = refitResult.discriminability || {};
@@ -1649,6 +1655,7 @@
                         await new Promise(r => setTimeout(r, 50));
                         try {
                             const refitResult = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                            if (refitResult.fallbackUsed && state.useStdScale) fallbackWarning = true;
                             const refitScores = refitResult.ability || {};
                             const refitDiffs = refitResult.difficulty || {};
                             const refitDiscs = refitResult.discriminability || {};
@@ -1996,6 +2003,11 @@
                         });
                     });
 
+                }
+
+                if (fallbackWarning && layout.title && layout.title.text) {
+                    layout.title.text += " (Fallback: Pop. Norm)";
+                    layout.title.font.color = "#d97706"; // Amber warning color
                 }
 
                 Plotly.newPlot('chart-container', plotData, layout, { responsive: true, displayModeBar: false });
