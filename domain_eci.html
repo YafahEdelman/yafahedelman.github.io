@@ -2122,12 +2122,8 @@
                 params.set('s', indices.join('~'));
             }
 
-            if (state.mode !== 'fixed') params.set('m', state.mode);
-            if (state.view !== 'chart') params.set('v', state.view);
+            // Only include essential state as per request
             if (state.minBenchmarks !== 2) params.set('min', state.minBenchmarks);
-            if (state.showCI) params.set('ci', '1');
-            if (state.showBreakpoint) params.set('bp', '1');
-            if (state.viewedDomain !== 'All') params.set('d', state.viewedDomain);
 
             return window.location.protocol + "//" + window.location.host + window.location.pathname + "?" + params.toString();
         }
