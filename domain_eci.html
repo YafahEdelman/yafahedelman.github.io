@@ -2109,15 +2109,25 @@
         // --- State Serialization ---
         function serializeState() {
             const params = new URLSearchParams();
-            const benches = Array.from(state.selectedBenchmarks).join(',');
-            if (benches) params.set('b', benches);
 
-            params.set('m', state.mode);
-            params.set('v', state.view);
-            params.set('min', state.minBenchmarks);
-            params.set('ci', state.showCI ? '1' : '0');
-            params.set('bp', state.showBreakpoint ? '1' : '0');
-            params.set('d', state.viewedDomain);
+            // Compress benchmarks using index mapping
+            if (state.selectedBenchmarks.size > 0) {
+                const sortedKeys = Object.keys(RAW_DATA.benchmarks).sort();
+                const indices = [];
+                state.selectedBenchmarks.forEach(id => {
+                    const idx = sortedKeys.indexOf(id);
+                    if (idx !== -1) indices.push(idx);
+                });
+                indices.sort((a, b) => a - b);
+                params.set('s', indices.join('~'));
+            }
+
+            if (state.mode !== 'fixed') params.set('m', state.mode);
+            if (state.view !== 'chart') params.set('v', state.view);
+            if (state.minBenchmarks !== 2) params.set('min', state.minBenchmarks);
+            if (state.showCI) params.set('ci', '1');
+            if (state.showBreakpoint) params.set('bp', '1');
+            if (state.viewedDomain !== 'All') params.set('d', state.viewedDomain);
 
             return window.location.protocol + "//" + window.location.host + window.location.pathname + "?" + params.toString();
         }
@@ -2126,12 +2136,26 @@
             const params = new URLSearchParams(window.location.search);
             let hasState = false;
 
+            // Handle legacy 'b' param (full names)
             if (params.has('b')) {
                 const benches = params.get('b').split(',');
                 state.selectedBenchmarks.clear();
                 benches.forEach(id => {
                     if (RAW_DATA.benchmarks[id]) {
                         state.selectedBenchmarks.add(id);
+                    }
+                });
+                hasState = true;
+            }
+
+            // Handle new 's' param (indices)
+            if (params.has('s')) {
+                const indices = params.get('s').split('~').map(i => parseInt(i, 10));
+                const sortedKeys = Object.keys(RAW_DATA.benchmarks).sort();
+                state.selectedBenchmarks.clear();
+                indices.forEach(idx => {
+                    if (sortedKeys[idx]) {
+                        state.selectedBenchmarks.add(sortedKeys[idx]);
                     }
                 });
                 hasState = true;
@@ -2198,15 +2222,30 @@
                 }
 
                 // Share functionality
-                const handleShare = async () => {
+                const handleShare = async (e) => {
                     const url = serializeState();
+                    const btn = e.currentTarget;
+                    const originalHTML = btn.innerHTML;
+
                     try {
                         await navigator.clipboard.writeText(url);
+
+                        // Button feedback
+                        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copied!`;
+                        btn.classList.replace('bg-indigo-600', 'bg-green-600');
+                        btn.classList.replace('hover:bg-indigo-700', 'hover:bg-green-700');
+
+                        // Status feedback
                         const status = document.getElementById('status-text');
                         const originalText = status.innerText;
                         status.innerText = "Link copied to clipboard!";
                         status.classList.add('text-indigo-600', 'font-bold');
+
                         setTimeout(() => {
+                            btn.innerHTML = originalHTML;
+                            btn.classList.replace('bg-green-600', 'bg-indigo-600');
+                            btn.classList.replace('hover:bg-green-700', 'hover:bg-indigo-700');
+
                             status.innerText = originalText;
                             status.classList.remove('text-indigo-600', 'font-bold');
                         }, 2000);
