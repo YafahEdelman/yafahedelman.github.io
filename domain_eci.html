@@ -1620,7 +1620,8 @@
 
                             // Growth Factors
                             const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
-                            const calcGrowth = (slope) => Math.exp(slope * msPerYear).toFixed(2) + "x / year";
+                            // Additive growth: slope (points/ms) * msPerYear = points/year
+                            const calcGrowth = (slope) => (slope * msPerYear).toFixed(2) + " ECI points / year";
 
                             const linearGrowth = calcGrowth(lin.slope);
 
@@ -1662,11 +1663,30 @@
                                 ${ciText ? `<div class="mt-1 pt-1 border-t border-gray-100 text-gray-400 text-[10px]">${ciText}</div>` : ''}
                             `;
 
+                            // Helper to generate dense points for hover
+                            const generateLinePoints = (startT, endT, slope, intercept) => {
+                                const pointsX = [];
+                                const pointsY = [];
+                                const step = 1000 * 60 * 60 * 24 * 15; // 15 days
+                                for (let t = startT; t <= endT; t += step) {
+                                    pointsX.push(new Date(t).toISOString());
+                                    pointsY.push(slope * t + intercept);
+                                }
+                                // Ensure end point is included
+                                if (pointsX[pointsX.length-1] !== new Date(endT).toISOString()) {
+                                    pointsX.push(new Date(endT).toISOString());
+                                    pointsY.push(slope * endT + intercept);
+                                }
+                                return { x: pointsX, y: pointsY };
+                            };
+
                             const xMin = xRange[0], xMax = xRange[1];
+
                             // 1. Linear Fit
+                            const linPts = generateLinePoints(xMin, xMax, lin.slope, lin.intercept);
                             plotData.push({
-                                x: [new Date(xMin).toISOString(), new Date(xMax).toISOString()],
-                                y: [lin.slope * xMin + lin.intercept, lin.slope * xMax + lin.intercept],
+                                x: linPts.x,
+                                y: linPts.y,
                                 mode: 'lines', type: 'scatter', name: 'Linear Fit',
                                 line: { dash: 'dot', color: '#9ca3af', width: 2 },
                                 hovertemplate: `<b>Linear Trend</b><br>Growth: ${linearGrowth}<extra></extra>`
@@ -1674,18 +1694,21 @@
 
                             // 2. Constrained Breakpoint Fit
                             if (bicBp < bicLin && constrainedBp) {
-                                const ySplit = constrainedBp.intercept1 + constrainedBp.slope1 * splitX;
+                                const splitX = ci ? ci.median : bp.splitX;
 
+                                const prePts = generateLinePoints(xMin, splitX, constrainedBp.slope1, constrainedBp.intercept1);
                                 plotData.push({
-                                    x: [new Date(xMin).toISOString(), new Date(splitX).toISOString()],
-                                    y: [constrainedBp.intercept1 + constrainedBp.slope1 * xMin, ySplit],
+                                    x: prePts.x,
+                                    y: prePts.y,
                                     mode: 'lines', type: 'scatter', name: 'Pre-Break',
                                     line: { color: '#4f46e5', width: 3 },
                                     hovertemplate: `<b>Pre-Break Trend</b><br>Growth: ${preGrowth}<extra></extra>`
                                 });
+
+                                const postPts = generateLinePoints(splitX, xMax, constrainedBp.slope2, constrainedBp.intercept2);
                                 plotData.push({
-                                    x: [new Date(splitX).toISOString(), new Date(xMax).toISOString()],
-                                    y: [ySplit, constrainedBp.intercept2 + constrainedBp.slope2 * xMax],
+                                    x: postPts.x,
+                                    y: postPts.y,
                                     mode: 'lines', type: 'scatter', name: 'Post-Break',
                                     line: { color: '#ec4899', width: 3 },
                                     hovertemplate: `<b>Post-Break Trend</b><br>Growth: ${postGrowth}<extra></extra>`
