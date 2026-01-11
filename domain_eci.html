@@ -136,6 +136,12 @@
             </div>
             <label
                 class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
+                <input type="checkbox" id="show-breakpoint-toggle"
+                    class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
+                <span class="text-sm font-medium text-gray-700">Breakpoint Analysis</span>
+            </label>
+            <label
+                class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
                 <input type="checkbox" id="show-ci-toggle"
                     class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
                 <span class="text-sm font-medium text-gray-700">Show 90% CI</span>
@@ -179,6 +185,11 @@
                         <button id="mobile-mode-fixed" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Fixed Parameters</button>
                         <button id="mobile-mode-refit" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Refit (JMLE)</button>
                         <button id="mobile-mode-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Compare</button>
+                      </div>
+
+                      <div class="flex items-center justify-between">
+                          <span class="text-sm font-medium text-gray-700">Breakpoint Analysis</span>
+                          <input type="checkbox" id="mobile-show-breakpoint-toggle" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
                      </div>
 
                      <div class="flex items-center justify-between">
@@ -292,8 +303,13 @@
                 </div>
             </div>
 
-            <div class="flex-1 p-2 lg:p-6" id="chart-container">
+            <div class="flex-1 p-2 lg:p-6 relative" id="chart-wrapper">
                 <!-- Plotly Chart -->
+                <div id="chart-container" class="w-full h-full"></div>
+                <div id="breakpoint-stats" class="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200 text-xs hidden z-10 max-w-xs">
+                    <h3 class="font-bold text-gray-800 mb-2 border-b pb-1">Breakpoint Analysis</h3>
+                    <div id="breakpoint-content" class="space-y-1.5 text-gray-600"></div>
+                </div>
             </div>
             <div class="flex-1 p-6 hidden overflow-auto custom-scrollbar" id="table-container">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -355,7 +371,8 @@
             models: [], // Computed capabilities
             cachedRefit: null,
             minBenchmarks: 2,
-            showCI: false
+            showCI: false,
+            showBreakpoint: false
         };
 
         const DOMAIN_MAP = {
@@ -711,6 +728,157 @@
                 // Return empty to avoid crash
                 return {};
             }
+        }
+
+        // --- Breakpoint Analysis Logic ---
+
+        function linearRegression(points) {
+            const n = points.length;
+            if (n < 2) return null;
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            points.forEach(p => {
+                sumX += p.x;
+                sumY += p.y;
+                sumXY += p.x * p.y;
+                sumXX += p.x * p.x;
+            });
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+
+            let rss = 0;
+            points.forEach(p => {
+                const pred = slope * p.x + intercept;
+                rss += (p.y - pred) ** 2;
+            });
+
+            return { slope, intercept, rss, n, k: 2 };
+        }
+
+        function calculateBIC(n, k, rss) {
+            if (rss <= 0) return -Infinity;
+            return n * Math.log(rss / n) + k * Math.log(n);
+        }
+
+        function solveConstrained(points, x_bp) {
+            const n = points.length;
+            let s_u = 0, s_v = 0, s_y = 0;
+            let s_uu = 0, s_uv = 0, s_uy = 0;
+            let s_vv = 0, s_vy = 0;
+
+            for (let i = 0; i < n; i++) {
+                const u = points[i].x - x_bp;
+                const v = Math.max(0, u);
+                const y = points[i].y;
+
+                s_u += u; s_v += v; s_y += y;
+                s_uu += u * u; s_uv += u * v; s_uy += u * y;
+                s_vv += v * v; s_vy += v * y;
+            }
+
+            // Normal Equations for 3 variables: y = A + B*u + C*v
+            // Matrix M
+            const M00 = n, M01 = s_u, M02 = s_v;
+            const M10 = s_u, M11 = s_uu, M12 = s_uv;
+            const M20 = s_v, M21 = s_uv, M22 = s_vv;
+
+            const R0 = s_y, R1 = s_uy, R2 = s_vy;
+
+            const det = M00 * (M11 * M22 - M12 * M21) -
+                        M01 * (M10 * M22 - M12 * M20) +
+                        M02 * (M10 * M21 - M11 * M20);
+
+            if (Math.abs(det) < 1e-9) return null;
+
+            const invDet = 1.0 / det;
+
+            const A = invDet * (R0 * (M11 * M22 - M12 * M21) + R1 * (M02 * M21 - M01 * M22) + R2 * (M01 * M12 - M02 * M11));
+            const B = invDet * (R0 * (M12 * M20 - M10 * M22) + R1 * (M00 * M22 - M02 * M20) + R2 * (M10 * M02 - M00 * M12));
+            const C = invDet * (R0 * (M10 * M21 - M11 * M20) + R1 * (M01 * M20 - M00 * M21) + R2 * (M00 * M11 - M01 * M10));
+
+            // Parameters
+            const slope1 = B;
+            const slope2 = B + C;
+            const intercept1 = A - B * x_bp;
+            const intercept2 = A - (B + C) * x_bp;
+
+            let rss = 0;
+            for (let i = 0; i < n; i++) {
+                const u = points[i].x - x_bp;
+                const v = Math.max(0, u);
+                const pred = A + B * u + C * v;
+                rss += (points[i].y - pred) ** 2;
+            }
+
+            return {
+                intercept1, slope1,
+                intercept2, slope2,
+                rss,
+                k: 4 // 3 coeffs + 1 breakpoint parameter
+            };
+        }
+
+        function breakpointRegression(points) {
+            const n = points.length;
+            if (n < 6) return null;
+
+            points.sort((a, b) => a.x - b.x);
+            let best = { rss: Infinity };
+            const minPoints = 3;
+
+            for (let i = minPoints; i < n - minPoints; i++) {
+                const candidateX = points[i].x;
+                const fit = solveConstrained(points, candidateX);
+                if (fit && fit.rss < best.rss) {
+                    best = { ...fit, splitX: candidateX, splitIndex: i };
+                }
+            }
+            return best.rss === Infinity ? null : best;
+        }
+
+        function getFrontier(points) {
+            if (points.length === 0) return [];
+            // Sort by x (date)
+            // Shallow copy to avoid mutating original if needed, though sort is in-place
+            const sorted = [...points].sort((a, b) => a.x - b.x);
+
+            const frontier = [];
+            let maxVal = -Infinity;
+
+            sorted.forEach(p => {
+                if (p.y > maxVal) {
+                    frontier.push(p);
+                    maxVal = p.y;
+                }
+            });
+            return frontier;
+        }
+
+        function bootstrapFrontier(allPoints, n_boot = 100) {
+            const splitDates = [];
+
+            for (let b = 0; b < n_boot; b++) {
+                // Pairs Bootstrap: Resample full dataset
+                const sample = [];
+                for(let i=0; i<allPoints.length; i++) {
+                    sample.push(allPoints[Math.floor(Math.random() * allPoints.length)]);
+                }
+
+                // Compute Frontier of Sample
+                const frontier = getFrontier(sample);
+
+                // Ensure enough points on frontier to fit
+                if (frontier.length >= 6) {
+                    const res = breakpointRegression(frontier);
+                    if (res) splitDates.push(res.splitX);
+                }
+            }
+
+            if (splitDates.length === 0) return null;
+            splitDates.sort((a, b) => a - b);
+            const low = splitDates[Math.floor(splitDates.length * 0.05)];
+            const high = splitDates[Math.floor(splitDates.length * 0.95)];
+
+            return { low, high, median: splitDates[Math.floor(splitDates.length * 0.5)] };
         }
 
         // --- UI Rendering ---
@@ -1201,7 +1369,7 @@
                     }
 
                     if (state.view === 'table') {
-                        document.getElementById('chart-container').classList.add('hidden');
+                        document.getElementById('chart-wrapper').classList.add('hidden');
                         document.getElementById('table-container').classList.remove('hidden');
                         renderTable(rawPoints, 'compare');
                         status.innerText = `Showing ${rawPoints.length} models in table.`;
@@ -1210,7 +1378,7 @@
                     }
 
                     document.getElementById('table-container').classList.add('hidden');
-                    document.getElementById('chart-container').classList.remove('hidden');
+                    document.getElementById('chart-wrapper').classList.remove('hidden');
 
                     // Smart Labeling
                     const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange, isMobile);
@@ -1370,7 +1538,7 @@
                     }
 
                     if (state.view === 'table') {
-                        document.getElementById('chart-container').classList.add('hidden');
+                        document.getElementById('chart-wrapper').classList.add('hidden');
                         document.getElementById('table-container').classList.remove('hidden');
                         renderTable(rawPoints, state.mode);
                         status.innerText = `Showing ${rawPoints.length} models in table.`;
@@ -1379,7 +1547,7 @@
                     }
 
                     document.getElementById('table-container').classList.add('hidden');
-                    document.getElementById('chart-container').classList.remove('hidden');
+                    document.getElementById('chart-wrapper').classList.remove('hidden');
 
                     // Smart Labels
                     let xRange = [0, 1], yRange = [0, 1];
@@ -1400,6 +1568,128 @@
 
                     //Sort by date for line connection if we wanted lines (here strictly markers)
                     rawPoints.sort((a, b) => a.x - b.x);
+
+                    // Breakpoint Analysis Overlay
+                    const bpStatsDiv = document.getElementById('breakpoint-stats');
+                    const bpContentDiv = document.getElementById('breakpoint-content');
+
+                    if (state.showBreakpoint && rawPoints.length > 5) {
+                        bpStatsDiv.classList.remove('hidden');
+                        status.innerText = "Running statistical analysis...";
+
+                        await new Promise(r => setTimeout(r, 10));
+
+                        // Use Frontier for Analysis
+                        const frontierPoints = getFrontier(rawPoints);
+
+                        if (frontierPoints.length < 6) {
+                             bpContentDiv.innerText = "Insufficient frontier points for analysis.";
+                             status.innerText = "Analysis skipped.";
+                             return;
+                        }
+
+                        const lin = linearRegression(frontierPoints);
+                        const bp = breakpointRegression(frontierPoints);
+
+                        if (lin && bp) {
+                            const bicLin = calculateBIC(lin.n, lin.k, lin.rss);
+                            const bicBp = calculateBIC(frontierPoints.length, bp.k, bp.rss);
+
+                            let ciText = "";
+                            let ci = null;
+                            if (bicBp < bicLin - 2) {
+                                // Bootstrap using FULL data (rawPoints)
+                                ci = bootstrapFrontier(rawPoints, 100);
+                                if (ci) {
+                                    const dLow = new Date(ci.low).toISOString().split('T')[0];
+                                    const dHigh = new Date(ci.high).toISOString().split('T')[0];
+                                    ciText = `90% CI: ${dLow} to ${dHigh}`;
+                                }
+                            }
+
+                            const dSplit = new Date(bp.splitX).toISOString().split('T')[0];
+                            const diff = bicLin - bicBp;
+                            let evidence = "Weak/None";
+                            if (diff > 2) evidence = "Positive";
+                            if (diff > 6) evidence = "Strong";
+                            if (diff > 10) evidence = "Very Strong";
+
+                            bpContentDiv.innerHTML = `
+                                <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                                    <span class="text-gray-500">Linear BIC:</span>
+                                    <span class="font-mono text-right">${bicLin.toFixed(1)}</span>
+                                    <span class="text-gray-500">Break BIC:</span>
+                                    <span class="font-mono text-right font-bold text-indigo-600">${bicBp.toFixed(1)}</span>
+                                    <span class="text-gray-500">Delta BIC:</span>
+                                    <span class="font-mono text-right text-green-600">+${diff.toFixed(1)}</span>
+                                    <span class="text-gray-500">Evidence:</span>
+                                    <span class="text-right font-medium">${evidence}</span>
+                                    <span class="text-gray-500">Split Date:</span>
+                                    <span class="text-right font-bold text-gray-900">${dSplit}</span>
+                                </div>
+                                ${ciText ? `<div class="mt-1 pt-1 border-t border-gray-100 text-gray-400 text-[10px]">${ciText}</div>` : ''}
+                            `;
+
+                            const xMin = xRange[0], xMax = xRange[1];
+                            // 1. Linear Fit
+                            plotData.push({
+                                x: [new Date(xMin).toISOString(), new Date(xMax).toISOString()],
+                                y: [lin.slope * xMin + lin.intercept, lin.slope * xMax + lin.intercept],
+                                mode: 'lines', type: 'scatter', name: 'Linear Fit',
+                                line: { dash: 'dot', color: '#9ca3af', width: 2 },
+                                hoverinfo: 'none'
+                            });
+
+                            // 2. Constrained Breakpoint Fit
+                            if (bicBp < bicLin) {
+                                const splitX = bp.splitX;
+                                const ySplit = bp.intercept1 + bp.slope1 * splitX;
+
+                                plotData.push({
+                                    x: [new Date(xMin).toISOString(), new Date(splitX).toISOString()],
+                                    y: [bp.intercept1 + bp.slope1 * xMin, ySplit],
+                                    mode: 'lines', type: 'scatter', name: 'Pre-Break',
+                                    line: { color: '#4f46e5', width: 3 },
+                                    hoverinfo: 'none'
+                                });
+                                plotData.push({
+                                    x: [new Date(splitX).toISOString(), new Date(xMax).toISOString()],
+                                    y: [ySplit, bp.intercept2 + bp.slope2 * xMax],
+                                    mode: 'lines', type: 'scatter', name: 'Post-Break',
+                                    line: { color: '#ec4899', width: 3 },
+                                    hoverinfo: 'none'
+                                });
+
+                                if (ci) {
+                                     layout.shapes = [
+                                        {
+                                            type: 'rect',
+                                            xref: 'x', yref: 'paper',
+                                            x0: new Date(ci.low).toISOString(),
+                                            x1: new Date(ci.high).toISOString(),
+                                            y0: 0, y1: 1,
+                                            fillcolor: '#4f46e5',
+                                            opacity: 0.1,
+                                            line: { width: 0 }
+                                        },
+                                        {
+                                            type: 'line',
+                                            xref: 'x', yref: 'paper',
+                                            x0: new Date(splitX).toISOString(),
+                                            x1: new Date(splitX).toISOString(),
+                                            y0: 0, y1: 1,
+                                            line: { color: '#4f46e5', width: 1, dash: 'dash' }
+                                        }
+                                     ];
+                                }
+                            }
+                        } else {
+                            bpContentDiv.innerText = "Insufficient data.";
+                        }
+                        status.innerText = "Analysis complete.";
+                    } else {
+                        bpStatsDiv.classList.add('hidden');
+                    }
 
                     // Group by Organization
                     const orgGroups = {};
@@ -1735,6 +2025,22 @@
                         updateChart();
                     });
                 }
+
+                // Show Breakpoint toggle
+                function toggleBreakpoint(checked) {
+                    state.showBreakpoint = checked;
+                    const dToggle = document.getElementById('show-breakpoint-toggle');
+                    if (dToggle) dToggle.checked = checked;
+                    const mToggle = document.getElementById('mobile-show-breakpoint-toggle');
+                    if (mToggle) mToggle.checked = checked;
+                    updateChart();
+                }
+
+                const bpToggle = document.getElementById('show-breakpoint-toggle');
+                if (bpToggle) bpToggle.addEventListener('change', (e) => toggleBreakpoint(e.target.checked));
+
+                const mobBpToggle = document.getElementById('mobile-show-breakpoint-toggle');
+                if (mobBpToggle) mobBpToggle.addEventListener('change', (e) => toggleBreakpoint(e.target.checked));
 
                 // Show CI toggle
                 function toggleCI(checked) {
