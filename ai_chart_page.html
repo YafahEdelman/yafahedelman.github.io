@@ -164,7 +164,7 @@ Return valid JSON with no markdown formatting.
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         messages: [{ role: 'user', content: prompt }],
-                        model: 'openai',
+                        model: 'gpt-4o-mini',
                         jsonMode: false // Explicitly false as some proxies don't support it
                     })
                 });
@@ -174,18 +174,49 @@ Return valid JSON with no markdown formatting.
                 let text = await response.text();
                 console.log("Raw AI Response:", text);
 
-                // Robust JSON extraction
                 let jsonStr = text.trim();
-                // If it contains markdown code blocks, try to extract content inside
+
+                // Check if the API returned a message object (e.g. { role: "assistant", content: "..." })
+                try {
+                    const parsedObj = JSON.parse(jsonStr);
+                    if (parsedObj && (parsedObj.role || parsedObj.content || parsedObj.reasoning_content)) {
+                        if (parsedObj.content) {
+                            jsonStr = parsedObj.content;
+                        } else if (parsedObj.reasoning_content) {
+                            // User requested to allow reasoning content.
+                            // If content is missing, we try to extract the JSON from the reasoning content itself.
+                            console.warn("AI returned reasoning but no content. Attempting to extract from reasoning...");
+                            jsonStr = parsedObj.reasoning_content;
+                        }
+                    }
+                } catch (e) {
+                    // Not a JSON message object, treat as raw string
+                }
+
+                // Robust JSON extraction:
+                // 1. Try to find a markdown code block
                 const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
                 if (codeBlockMatch) {
                     jsonStr = codeBlockMatch[1].trim();
                 } else {
-                    // Fallback: find first '{' and last '}'
+                    // 2. Fallback: Find the *last* valid JSON object that looks like our response
+                    // We look for a structure that contains "dataset" key.
+                    // This is useful if the reasoning contains other JSON objects (like the schema).
+
+                    // Regex to find { ... "dataset": ... }
+                    // Note: This is a simple heuristic.
                     const firstBrace = jsonStr.indexOf('{');
                     const lastBrace = jsonStr.lastIndexOf('}');
+
                     if (firstBrace !== -1 && lastBrace !== -1) {
-                        jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+                        // Extract the whole block
+                        const potentialJson = jsonStr.substring(firstBrace, lastBrace + 1);
+
+                        // If it contains "reasoning_content", we might have just re-extracted the outer wrapper?
+                        // No, because we already unwrapped it above if it was valid JSON.
+                        // But if the unwrapping failed (invalid JSON), we might be here.
+
+                        jsonStr = potentialJson;
                     }
                 }
 
