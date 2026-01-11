@@ -260,6 +260,26 @@
                         </div>
                     </div>
 
+                    <!-- Min Breakpoint Points Selector -->
+                    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/30">
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="min-breakpoint-points" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Min Breakpoint Pts</label>
+                            <span id="min-breakpoint-points-val" class="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded shadow-sm ring-1 ring-gray-100">3</span>
+                        </div>
+                        <div class="relative w-full h-6 flex items-center">
+                            <!-- Custom Ticks (Dots) on Track -->
+                            <div class="absolute w-full h-1 top-1/2 -translate-y-1/2 pointer-events-none px-[8px]">
+                                <div class="absolute left-[0%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                                <div class="absolute left-[100%] top-1/2 -translate-x-1/2 -translate-y-[2px] w-1 h-1 bg-gray-400 rounded-full"></div>
+                            </div>
+                            <input type="range" id="min-breakpoint-points" min="1" max="10" value="3" step="1" class="w-full relative z-20 bg-transparent">
+                        </div>
+                        <div class="relative w-full h-2 mt-1 px-[8px] pointer-events-none">
+                            <div class="absolute left-[0%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                            <div class="absolute left-[100%] -translate-x-1/2 w-0.5 h-1.5 bg-gray-300 rounded-full"></div>
+                        </div>
+                    </div>
+
                     <!-- Domain Selection Dropdown -->
                     <div class="px-5 py-3 border-b border-gray-100">
                         <div class="flex justify-between items-center mb-2">
@@ -398,6 +418,7 @@
             models: [], // Computed capabilities
             cachedRefit: null,
             minBenchmarks: 2,
+            minBreakpointPoints: 3,
             showCI: false,
             showBreakpoint: false,
             useStdScale: false
@@ -856,7 +877,7 @@
 
             points.sort((a, b) => a.x - b.x);
             let best = { rss: Infinity };
-            const minPoints = 3;
+            const minPoints = state.minBreakpointPoints || 3;
 
             for (let i = minPoints; i < n - minPoints; i++) {
                 const candidateX = points[i].x;
@@ -2177,6 +2198,7 @@
 
             // Only include essential state as per request
             if (state.minBenchmarks !== 2) params.set('min', state.minBenchmarks);
+            if (state.minBreakpointPoints !== 3) params.set('mbp', state.minBreakpointPoints);
             if (state.useStdScale) params.set('std', '1');
 
             return window.location.protocol + "//" + window.location.host + window.location.pathname + "?" + params.toString();
@@ -2214,6 +2236,7 @@
             if (params.has('m')) { state.mode = params.get('m'); hasState = true; }
             if (params.has('v')) { state.view = params.get('v'); hasState = true; }
             if (params.has('min')) { state.minBenchmarks = parseInt(params.get('min'), 10); hasState = true; }
+            if (params.has('mbp')) { state.minBreakpointPoints = parseInt(params.get('mbp'), 10); hasState = true; }
             if (params.has('ci')) { state.showCI = params.get('ci') === '1'; hasState = true; }
             if (params.has('bp')) { state.showBreakpoint = params.get('bp') === '1'; hasState = true; }
             if (params.has('d')) { state.viewedDomain = params.get('d'); hasState = true; }
@@ -2426,6 +2449,12 @@
                      if (s) s.value = state.minBenchmarks;
                      if (sv) sv.innerText = state.minBenchmarks;
                 }
+                if (state.minBreakpointPoints) {
+                     const s = document.getElementById('min-breakpoint-points');
+                     const sv = document.getElementById('min-breakpoint-points-val');
+                     if (s) s.value = state.minBreakpointPoints;
+                     if (sv) sv.innerText = state.minBreakpointPoints;
+                }
                 const bpT = document.getElementById('show-breakpoint-toggle');
                 const mBpT = document.getElementById('mobile-show-breakpoint-toggle');
                 if (bpT) bpT.checked = state.showBreakpoint;
@@ -2449,6 +2478,18 @@
                         });
                         renderSelectedBenchmarkTags();
                         renderBenchmarkList();
+                        updateChart();
+                    });
+                }
+
+                // Min Breakpoint Points selector
+                const bpSlider = document.getElementById('min-breakpoint-points');
+                if (bpSlider) {
+                    bpSlider.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value);
+                        const display = document.getElementById('min-breakpoint-points-val');
+                        if (display) display.innerText = val;
+                        state.minBreakpointPoints = val;
                         updateChart();
                     });
                 }
