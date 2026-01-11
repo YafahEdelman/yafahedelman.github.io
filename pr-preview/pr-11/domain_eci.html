@@ -835,30 +835,42 @@
             return best.rss === Infinity ? null : best;
         }
 
-        function bootstrapBreakpoint(points, n_boot = 100) {
-            const best = breakpointRegression(points);
-            if (!best) return null;
+        function getFrontier(points) {
+            if (points.length === 0) return [];
+            // Sort by x (date)
+            // Shallow copy to avoid mutating original if needed, though sort is in-place
+            const sorted = [...points].sort((a, b) => a.x - b.x);
 
-            // Calculate Residuals
-            const residuals = points.map((p) => {
-                let pred;
-                if (p.x <= best.splitX) pred = best.intercept1 + best.slope1 * p.x;
-                else pred = best.intercept2 + best.slope2 * p.x;
-                return p.y - pred;
+            const frontier = [];
+            let maxVal = -Infinity;
+
+            sorted.forEach(p => {
+                if (p.y > maxVal) {
+                    frontier.push(p);
+                    maxVal = p.y;
+                }
             });
+            return frontier;
+        }
 
+        function bootstrapFrontier(allPoints, n_boot = 100) {
             const splitDates = [];
-            for (let b = 0; b < n_boot; b++) {
-                const synthPoints = points.map((p, i) => {
-                    const r = residuals[Math.floor(Math.random() * residuals.length)];
-                    let pred;
-                    if (p.x <= best.splitX) pred = best.intercept1 + best.slope1 * p.x;
-                    else pred = best.intercept2 + best.slope2 * p.x;
-                    return { x: p.x, y: pred + r };
-                });
 
-                const bootRes = breakpointRegression(synthPoints);
-                if (bootRes) splitDates.push(bootRes.splitX);
+            for (let b = 0; b < n_boot; b++) {
+                // Pairs Bootstrap: Resample full dataset
+                const sample = [];
+                for(let i=0; i<allPoints.length; i++) {
+                    sample.push(allPoints[Math.floor(Math.random() * allPoints.length)]);
+                }
+
+                // Compute Frontier of Sample
+                const frontier = getFrontier(sample);
+
+                // Ensure enough points on frontier to fit
+                if (frontier.length >= 6) {
+                    const res = breakpointRegression(frontier);
+                    if (res) splitDates.push(res.splitX);
+                }
             }
 
             if (splitDates.length === 0) return null;
@@ -1567,17 +1579,27 @@
 
                         await new Promise(r => setTimeout(r, 10));
 
-                        const lin = linearRegression(rawPoints);
-                        const bp = breakpointRegression(rawPoints);
+                        // Use Frontier for Analysis
+                        const frontierPoints = getFrontier(rawPoints);
+
+                        if (frontierPoints.length < 6) {
+                             bpContentDiv.innerText = "Insufficient frontier points for analysis.";
+                             status.innerText = "Analysis skipped.";
+                             return;
+                        }
+
+                        const lin = linearRegression(frontierPoints);
+                        const bp = breakpointRegression(frontierPoints);
 
                         if (lin && bp) {
                             const bicLin = calculateBIC(lin.n, lin.k, lin.rss);
-                            const bicBp = calculateBIC(rawPoints.length, bp.k, bp.rss); // Use bp.rss not bp.totalRSS
+                            const bicBp = calculateBIC(frontierPoints.length, bp.k, bp.rss);
 
                             let ciText = "";
                             let ci = null;
                             if (bicBp < bicLin - 2) {
-                                ci = bootstrapBreakpoint(rawPoints, 100);
+                                // Bootstrap using FULL data (rawPoints)
+                                ci = bootstrapFrontier(rawPoints, 100);
                                 if (ci) {
                                     const dLow = new Date(ci.low).toISOString().split('T')[0];
                                     const dHigh = new Date(ci.high).toISOString().split('T')[0];
