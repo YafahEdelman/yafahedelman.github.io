@@ -306,7 +306,7 @@
             <div class="flex-1 p-2 lg:p-6 relative" id="chart-wrapper">
                 <!-- Plotly Chart -->
                 <div id="chart-container" class="w-full h-full"></div>
-                <div id="breakpoint-stats" class="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200 text-xs hidden z-10 max-w-xs">
+                <div id="breakpoint-stats" class="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200 text-xs hidden z-10 max-w-xs">
                     <h3 class="font-bold text-gray-800 mb-2 border-b pb-1">Breakpoint Analysis</h3>
                     <div id="breakpoint-content" class="space-y-1.5 text-gray-600"></div>
                 </div>
@@ -853,7 +853,7 @@
             return frontier;
         }
 
-        function bootstrapFrontier(allPoints, n_boot = 100) {
+        function bootstrapFrontier(allPoints, n_boot = 1000) {
             const splitDates = [];
 
             for (let b = 0; b < n_boot; b++) {
@@ -1597,22 +1597,44 @@
 
                             let ciText = "";
                             let ci = null;
-                            if (bicBp < bicLin - 2) {
+                            if (bicBp < bicLin + 2) {
                                 // Bootstrap using FULL data (rawPoints)
-                                ci = bootstrapFrontier(rawPoints, 100);
-                                if (ci) {
-                                    const dLow = new Date(ci.low).toISOString().split('T')[0];
-                                    const dHigh = new Date(ci.high).toISOString().split('T')[0];
-                                    ciText = `90% CI: ${dLow} to ${dHigh}`;
-                                }
+                                ci = bootstrapFrontier(rawPoints, 1000);
                             }
 
-                            const dSplit = new Date(bp.splitX).toISOString().split('T')[0];
+                            if (ci) {
+                                const dLow = new Date(ci.low).toISOString().split('T')[0];
+                                const dHigh = new Date(ci.high).toISOString().split('T')[0];
+                                ciText = `90% CI: ${dLow} to ${dHigh}`;
+                            }
+
+                            // Use median split if available
+                            const splitX = ci ? ci.median : bp.splitX;
+                            const dSplit = new Date(splitX).toISOString().split('T')[0];
+
                             const diff = bicLin - bicBp;
                             let evidence = "Weak/None";
                             if (diff > 2) evidence = "Positive";
                             if (diff > 6) evidence = "Strong";
                             if (diff > 10) evidence = "Very Strong";
+
+                            // Growth Factors
+                            const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
+                            const calcGrowth = (slope) => Math.exp(slope * msPerYear).toFixed(2) + "x / year";
+
+                            const linearGrowth = calcGrowth(lin.slope);
+
+                            let preGrowth = "-", postGrowth = "-";
+                            let constrainedBp = null;
+
+                            // Re-fit constrained with the chosen split point
+                            if (bicBp < bicLin) {
+                                constrainedBp = solveConstrained(frontierPoints, splitX);
+                                if (constrainedBp) {
+                                    preGrowth = calcGrowth(constrainedBp.slope1);
+                                    postGrowth = calcGrowth(constrainedBp.slope2);
+                                }
+                            }
 
                             bpContentDiv.innerHTML = `
                                 <div class="grid grid-cols-2 gap-x-2 gap-y-1">
@@ -1626,6 +1648,16 @@
                                     <span class="text-right font-medium">${evidence}</span>
                                     <span class="text-gray-500">Split Date:</span>
                                     <span class="text-right font-bold text-gray-900">${dSplit}</span>
+
+                                    <span class="text-gray-500 col-span-2 border-t border-gray-100 mt-1 pt-1 font-bold">Growth Rates</span>
+                                    <span class="text-gray-500">Linear:</span>
+                                    <span class="font-mono text-right">${linearGrowth}</span>
+                                    ${constrainedBp ? `
+                                    <span class="text-gray-500">Pre-Break:</span>
+                                    <span class="font-mono text-right text-indigo-600">${preGrowth}</span>
+                                    <span class="text-gray-500">Post-Break:</span>
+                                    <span class="font-mono text-right text-pink-600">${postGrowth}</span>
+                                    ` : ''}
                                 </div>
                                 ${ciText ? `<div class="mt-1 pt-1 border-t border-gray-100 text-gray-400 text-[10px]">${ciText}</div>` : ''}
                             `;
@@ -1637,27 +1669,26 @@
                                 y: [lin.slope * xMin + lin.intercept, lin.slope * xMax + lin.intercept],
                                 mode: 'lines', type: 'scatter', name: 'Linear Fit',
                                 line: { dash: 'dot', color: '#9ca3af', width: 2 },
-                                hoverinfo: 'none'
+                                hovertemplate: `<b>Linear Trend</b><br>Growth: ${linearGrowth}<extra></extra>`
                             });
 
                             // 2. Constrained Breakpoint Fit
-                            if (bicBp < bicLin) {
-                                const splitX = bp.splitX;
-                                const ySplit = bp.intercept1 + bp.slope1 * splitX;
+                            if (bicBp < bicLin && constrainedBp) {
+                                const ySplit = constrainedBp.intercept1 + constrainedBp.slope1 * splitX;
 
                                 plotData.push({
                                     x: [new Date(xMin).toISOString(), new Date(splitX).toISOString()],
-                                    y: [bp.intercept1 + bp.slope1 * xMin, ySplit],
+                                    y: [constrainedBp.intercept1 + constrainedBp.slope1 * xMin, ySplit],
                                     mode: 'lines', type: 'scatter', name: 'Pre-Break',
                                     line: { color: '#4f46e5', width: 3 },
-                                    hoverinfo: 'none'
+                                    hovertemplate: `<b>Pre-Break Trend</b><br>Growth: ${preGrowth}<extra></extra>`
                                 });
                                 plotData.push({
                                     x: [new Date(splitX).toISOString(), new Date(xMax).toISOString()],
-                                    y: [ySplit, bp.intercept2 + bp.slope2 * xMax],
+                                    y: [ySplit, constrainedBp.intercept2 + constrainedBp.slope2 * xMax],
                                     mode: 'lines', type: 'scatter', name: 'Post-Break',
                                     line: { color: '#ec4899', width: 3 },
-                                    hoverinfo: 'none'
+                                    hovertemplate: `<b>Post-Break Trend</b><br>Growth: ${postGrowth}<extra></extra>`
                                 });
 
                                 if (ci) {
