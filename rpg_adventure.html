@@ -301,7 +301,7 @@ class Game {
         this.lastInputTime = 0;
 
         this.player = {
-            x: 2 * TILE_SIZE + TILE_SIZE/2,
+            x: 3 * TILE_SIZE + TILE_SIZE/2,
             y: 2 * TILE_SIZE + TILE_SIZE/2,
             speed: 3,
             vx: 0,
@@ -502,7 +502,7 @@ class Game {
                  this.queueDialogue("B-0p: Entering portal... Destination: Sector 7.");
                  this.queueDialogue("TO BE CONTINUED...");
                  // Reset for fun
-                 this.player.x = 2.5 * TILE_SIZE;
+                 this.player.x = 3.5 * TILE_SIZE;
                  this.player.y = 2.5 * TILE_SIZE;
                  this.doorOpen = false;
                  this.items.forEach(i => i.collected = false);
