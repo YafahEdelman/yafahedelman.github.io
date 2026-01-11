@@ -47,6 +47,7 @@
             padding: 20px;
             font-family: 'Courier New', monospace;
             display: none;
+            pointer-events: auto;
         }
         .dialogue-text {
             font-size: 16px;
@@ -268,6 +269,24 @@ const drawTile = (ctx, x, y, type) => {
     } else if (type === 4) { // Open Door
         ctx.fillStyle = '#064e3b';
         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    } else if (type === 5) { // Terminal
+        // Screen base
+        ctx.fillStyle = '#4b5563';
+        ctx.fillRect(x + 5, y + 10, TILE_SIZE - 10, TILE_SIZE - 15);
+
+        // Screen glass
+        ctx.fillStyle = '#0ea5e9'; // Sky blue
+        ctx.fillRect(x + 8, y + 13, TILE_SIZE - 16, TILE_SIZE - 24);
+
+        // Animated text lines
+        ctx.fillStyle = '#e0f2fe';
+        if (Math.random() > 0.5) {
+             ctx.fillRect(x + 10, y + 16, 15, 2);
+             ctx.fillRect(x + 10, y + 20, 10, 2);
+        } else {
+             ctx.fillRect(x + 10, y + 16, 12, 2);
+             ctx.fillRect(x + 10, y + 20, 18, 2);
+        }
     }
 };
 
@@ -279,6 +298,7 @@ class Game {
         this.ctx = this.canvas.getContext('2d');
         this.keys = {};
         this.frameCount = 0;
+        this.lastInputTime = 0;
 
         this.player = {
             x: 2 * TILE_SIZE + TILE_SIZE/2,
@@ -290,12 +310,12 @@ class Game {
             height: 30
         };
 
-        // 0: Void, 1: Wall, 2: Floor, 3: Door (Closed), 4: Door (Open)
+        // 0: Void, 1: Wall, 2: Floor, 3: Door (Closed), 4: Door (Open), 5: Terminal
         // 20x15 grid (800x600 / 40)
         this.map = [
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
             [1,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1],
-            [1,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1],
+            [1,2,5,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1],
             [1,2,2,2,1,2,2,2,1,1,1,1,2,1,2,2,2,2,2,1],
             [1,2,2,2,2,2,2,2,1,0,0,1,2,1,2,2,2,2,2,1],
             [1,1,1,3,1,1,1,1,1,0,0,1,2,2,2,2,2,2,2,1],
@@ -305,10 +325,16 @@ class Game {
             [1,2,1,0,0,1,1,1,2,1,2,1,2,2,2,2,2,2,2,1],
             [1,2,2,2,2,2,2,2,2,2,2,1,2,2,2,1,1,1,1,1],
             [1,2,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,1],
-            [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+            [1,2,2,2,2,2,2,2,2,2,2,2,2,5,2,2,2,2,2,1],
             [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         ];
+
+        // Map text for terminals (row, col) key
+        this.terminalLogs = {
+            "2,2": "LOG 492: The reactor leak is worse than predicted. Evacuation protocol initiated. If any maintenance bots are reading this... good luck.",
+            "12,13": "LOG 501: Coordinates set for Sector 7. The portal is unstable, but it's our only way out. We're leaving the power cells behind for the next shift."
+        };
 
         this.items = [
             { x: 8 * TILE_SIZE + 20, y: 2 * TILE_SIZE + 20, collected: false },
@@ -320,6 +346,7 @@ class Game {
         this.isDialogueOpen = false;
         this.batteriesCollected = 0;
         this.doorOpen = false;
+        this.nearTerminal = null; // Store position of nearby terminal
 
         this.init();
     }
@@ -329,8 +356,9 @@ class Game {
         this.resize();
         window.addEventListener('resize', () => this.resize());
 
-        this.queueDialogue("B-0p: Systems online...");
-        this.queueDialogue("Mission: Locate 3 Energy Cells to restore power to the station door.");
+        this.queueDialogue("B-0p: Reboot sequence complete. Memory banks... corrupted.");
+        this.queueDialogue("Diagnostic: Station deserted. Life support offline.");
+        this.queueDialogue("Objective: Locate 3 Energy Cells to restore power to the portal. I must follow them.");
 
         requestAnimationFrame(() => this.loop());
     }
@@ -339,7 +367,14 @@ class Game {
         window.addEventListener('keydown', (e) => {
             this.keys[e.key] = true;
             if (this.isDialogueOpen && (e.key === ' ' || e.key === 'Enter')) {
-                this.advanceDialogue();
+                // Debounce slightly to prevent accidental skipping
+                if (Date.now() - this.lastInputTime > 200) {
+                     this.advanceDialogue();
+                     this.lastInputTime = Date.now();
+                }
+            } else if (!this.isDialogueOpen && (e.key === ' ' || e.key === 'Enter')) {
+                // Interact
+                this.checkInteraction();
             }
         });
         window.addEventListener('keyup', (e) => this.keys[e.key] = false);
@@ -364,13 +399,28 @@ class Game {
             });
         });
 
+        // Tap to advance dialogue or interact
         document.getElementById('dialogue-box').addEventListener('click', () => {
              if (this.isDialogueOpen) this.advanceDialogue();
         });
+
+        // Add an interact button for mobile? Or just tap screen?
+        // For now let's just use tap on canvas for interaction if not moving?
+        // Simplest is making the dpad usable or adding a specific button,
+        // but for now let's assume keyboard for interaction or tapping the dialogue box when it appears.
     }
 
     resize() {
         // Keeps aspect ratio if possible or just fits
+    }
+
+    checkInteraction() {
+        if (this.nearTerminal) {
+            const key = `${this.nearTerminal.row},${this.nearTerminal.col}`;
+            if (this.terminalLogs[key]) {
+                this.queueDialogue(this.terminalLogs[key]);
+            }
+        }
     }
 
     queueDialogue(text) {
@@ -388,6 +438,7 @@ class Game {
             content.innerText = text;
             box.style.display = 'block';
             this.isDialogueOpen = true;
+            this.lastInputTime = Date.now();
         } else {
             document.getElementById('dialogue-box').style.display = 'none';
             this.isDialogueOpen = false;
@@ -421,6 +472,9 @@ class Game {
             this.player.y = nextY;
         }
 
+        // Check for nearby interaction points
+        this.checkProximity();
+
         // Item Collection
         this.items.forEach(item => {
             if (!item.collected) {
@@ -432,7 +486,7 @@ class Game {
                     this.batteriesCollected++;
                     this.updateHUD();
                     if (this.batteriesCollected === 3) {
-                        this.queueDialogue("Power restored! The door is opening.");
+                        this.queueDialogue("System: POWER RESTORED. Portal logic active.");
                         this.openDoor();
                     }
                 }
@@ -445,7 +499,8 @@ class Game {
              const col = Math.floor(this.player.x / TILE_SIZE);
              const row = Math.floor(this.player.y / TILE_SIZE);
              if (this.map[row][col] === 4) {
-                 this.queueDialogue("Mission Complete! Entering next sector...");
+                 this.queueDialogue("B-0p: Entering portal... Destination: Sector 7.");
+                 this.queueDialogue("TO BE CONTINUED...");
                  // Reset for fun
                  this.player.x = 2.5 * TILE_SIZE;
                  this.player.y = 2.5 * TILE_SIZE;
@@ -455,6 +510,31 @@ class Game {
                  this.updateHUD();
                  this.map[5][3] = 3; // Close door
              }
+        }
+    }
+
+    checkProximity() {
+        // Check grid cells around player
+        const col = Math.floor(this.player.x / TILE_SIZE);
+        const row = Math.floor(this.player.y / TILE_SIZE);
+
+        // Check neighbors
+        const neighbors = [
+            {r: row, c: col},
+            {r: row-1, c: col},
+            {r: row+1, c: col},
+            {r: row, c: col-1},
+            {r: row, c: col+1},
+        ];
+
+        this.nearTerminal = null;
+        for (let n of neighbors) {
+            if (n.r >= 0 && n.r < this.map.length && n.c >= 0 && n.c < this.map[0].length) {
+                if (this.map[n.r][n.c] === 5) {
+                    this.nearTerminal = {row: n.r, col: n.c};
+                    break;
+                }
+            }
         }
     }
 
@@ -486,7 +566,7 @@ class Game {
             if (row < 0 || row >= this.map.length || col < 0 || col >= this.map[0].length) return true;
 
             const tile = this.map[row][col];
-            if (tile === 1 || tile === 0 || tile === 3) return true; // Solid tiles
+            if (tile === 1 || tile === 0 || tile === 3 || tile === 5) return true; // Solid tiles
         }
         return false;
     }
@@ -515,6 +595,17 @@ class Game {
                     drawTile(this.ctx, col * TILE_SIZE, row * TILE_SIZE, tile);
                 }
             }
+        }
+
+        // Draw interaction hint if near terminal
+        if (this.nearTerminal && !this.isDialogueOpen) {
+            const tX = this.nearTerminal.col * TILE_SIZE + TILE_SIZE/2;
+            const tY = this.nearTerminal.row * TILE_SIZE;
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '12px Inter';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("SPACE", tX, tY - 5);
         }
 
         // Draw Items
