@@ -133,6 +133,10 @@
                     class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all">
                     Compare
                 </button>
+                <button id="mode-rank-compare"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all">
+                    Rank Comparison
+                </button>
             </div>
             <label
                 class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
@@ -185,6 +189,7 @@
                         <button id="mobile-mode-fixed" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Fixed Parameters</button>
                         <button id="mobile-mode-refit" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Refit (JMLE)</button>
                         <button id="mobile-mode-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Compare</button>
+                        <button id="mobile-mode-rank-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Rank Comparison</button>
                       </div>
 
                       <div class="flex items-center justify-between">
@@ -1139,6 +1144,8 @@
             let headers = [];
             if (mode === 'compare') {
                 headers = ['Model', 'Date', 'Fixed ECI', 'Refit ECI', 'Benchmarks Count'];
+            } else if (mode === 'rank-compare') {
+                headers = ['Model', 'Date', 'Fixed Rank', 'Refit Rank', 'Benchmarks Count'];
             } else {
                 headers = ['Model', 'Date', 'ECI', 'Benchmarks Count'];
             }
@@ -1197,6 +1204,12 @@
                     rowHTML += `
                         <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.x, p.ciFixed)}</td>
                         <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${fmtCI(p.y, p.ciRefit)}</td>
+                    `;
+                } else if (mode === 'rank-compare') {
+                    // p.x is Fixed Rank, p.y is Refit Rank
+                    rowHTML += `
+                        <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${p.x}</td>
+                        <td class="${cellPadding} whitespace-nowrap text-gray-700 font-mono">${p.y}</td>
                     `;
                 } else {
                     // p.y is ECI
@@ -1263,7 +1276,7 @@
                         .map(x => x.id);
                 };
 
-                if (state.mode === 'compare') {
+                if (state.mode === 'compare' || state.mode === 'rank-compare') {
                     loader.classList.remove('hidden');
                     status.innerText = "Computing comparison...";
                     await new Promise(r => setTimeout(r, 50));
@@ -1302,7 +1315,7 @@
                             let ciFixed = { low: null, high: null };
                             let ciRefit = { low: null, high: null };
 
-                            if (state.showCI) {
+                            if (state.showCI && state.mode === 'compare') { // Only calculate CI for standard compare
                                 // Calc Fixed CI
                                 const perfs = [], diffs = [], discs = [];
                                 activeBenchmarks.forEach(bId => {
@@ -1335,7 +1348,7 @@
 
                             rawPoints.push({
                                 id: modelId,
-                                x: cx,
+                                x: cx, // Store raw scores initially
                                 y: cy,
                                 count,
                                 name: m.name,
@@ -1344,6 +1357,38 @@
                             });
                         }
                     });
+
+                    // Rank Compare Logic Transformation
+                    if (state.mode === 'rank-compare') {
+                        // Sort by Fixed (descending) -> Assign Rank
+                        const sortedByFixed = [...rawPoints].sort((a, b) => b.x - a.x);
+                        sortedByFixed.forEach((p, i) => p.fixedRank = i + 1);
+
+                        // Sort by Refit (descending) -> Assign Rank
+                        const sortedByRefit = [...rawPoints].sort((a, b) => b.y - a.y);
+                        sortedByRefit.forEach((p, i) => p.refitRank = i + 1);
+
+                        // Update x, y to Ranks
+                        rawPoints.forEach(p => {
+                            p.x = p.fixedRank;
+                            p.y = p.refitRank;
+                        });
+
+                        // Calculate Spearman Correlation
+                        // rho = 1 - (6 * sum(d^2)) / (n * (n^2 - 1))
+                        const n = rawPoints.length;
+                        if (n > 1) {
+                            let sumD2 = 0;
+                            rawPoints.forEach(p => {
+                                const d = p.fixedRank - p.refitRank;
+                                sumD2 += d * d;
+                            });
+                            const rho = 1 - (6 * sumD2) / (n * (n * n - 1));
+                            status.innerText = `Spearman Correlation: ${rho.toFixed(4)} (${n} models)`;
+                        } else {
+                            status.innerText = "Not enough models for correlation.";
+                        }
+                    }
 
                     // 3. Axis Scaling
                     let xRange = [0, 1], yRange = [0, 1];
@@ -1354,16 +1399,31 @@
                         const yMin = Math.min(...ys), yMax = Math.max(...ys);
                         const xPad = (xMax - xMin || 1) * 0.08;
                         const yPad = (yMax - yMin || 1) * 0.08;
-                        xRange = [xMin - xPad, xMax + xPad];
-                        yRange = [yMin - yPad, yMax + yPad];
+
+                        // For ranks, we want 1 to be "top", so we might want to reverse ranges?
+                        // But standard plot is (0,0) at bottom-left.
+                        // If we want 1 at top-right (best-best), we need 1 to be high value.
+                        // But rank 1 is numerically low.
+                        // Let's reverse axes for Rank mode so 1 is at top/right if desired,
+                        // OR just plot numerically 1..N (1 is bottom-left).
+                        // Usually, rank plots have 1 at top-left or top-right.
+                        // Let's stick to standard numerical for now (1 is bottom-left).
+                        // Actually, reversing axis is better for "performance" intuition.
+                        if (state.mode === 'rank-compare') {
+                             xRange = [xMax + xPad, Math.max(0, xMin - xPad)]; // Reversed: N -> 1
+                             yRange = [yMax + yPad, Math.max(0, yMin - yPad)]; // Reversed: N -> 1
+                        } else {
+                             xRange = [xMin - xPad, xMax + xPad];
+                             yRange = [yMin - yPad, yMax + yPad];
+                        }
 
                         layout.xaxis.range = xRange;
                         layout.yaxis.range = yRange;
 
-                        // Trend Line
+                        // Trend Line (Diagonal for Rank Compare means perfect agreement)
                         plotData.push({
-                            x: xRange, y: yRange,
-                            mode: 'lines', type: 'scatter', name: 'Trend',
+                            x: xRange, y: xRange, // Diagonal y=x
+                            mode: 'lines', type: 'scatter', name: 'Agreement',
                             line: { dash: 'dash', color: 'rgba(0,0,0,0.15)', width: 1.5 }, showlegend: false, hoverinfo: 'none'
                         });
                     }
@@ -1371,8 +1431,8 @@
                     if (state.view === 'table') {
                         document.getElementById('chart-wrapper').classList.add('hidden');
                         document.getElementById('table-container').classList.remove('hidden');
-                        renderTable(rawPoints, 'compare');
-                        status.innerText = `Showing ${rawPoints.length} models in table.`;
+                        renderTable(rawPoints, state.mode);
+                        if (state.mode !== 'rank-compare') status.innerText = `Showing ${rawPoints.length} models in table.`;
                         loader.classList.add('hidden');
                         return;
                     }
@@ -1406,6 +1466,13 @@
                             textPositions.push(pos || 'top center');
                         });
 
+                        let hoverTemplate = '';
+                        if (state.mode === 'rank-compare') {
+                             hoverTemplate = '<b>%{hovertext}</b><br>Fixed Rank: %{x}<br>Refit Rank: %{y}<extra></extra>';
+                        } else {
+                             hoverTemplate = '<b>%{hovertext}</b><br>Fixed: %{x:.1f} %{customdata[0]}<br>Refit: %{y:.1f} %{customdata[1]}<extra></extra>';
+                        }
+
                         plotData.push({
                             x, y,
                             hovertext: hovertext,
@@ -1421,7 +1488,7 @@
                                 line: { width: 1, color: 'white' },
                                 opacity: 0.85
                             },
-                            error_x: state.showCI ? {
+                            error_x: (state.showCI && state.mode === 'compare') ? {
                                 type: 'data',
                                 array: points.map(p => (p.ciFixed.high !== null ? p.ciFixed.high - p.x : null)),
                                 arrayminus: points.map(p => (p.ciFixed.low !== null ? p.x - p.ciFixed.low : null)),
@@ -1430,7 +1497,7 @@
                                 thickness: 1,
                                 width: 2
                             } : undefined,
-                            error_y: state.showCI ? {
+                            error_y: (state.showCI && state.mode === 'compare') ? {
                                 type: 'data',
                                 array: points.map(p => (p.ciRefit.high !== null ? p.ciRefit.high - p.y : null)),
                                 arrayminus: points.map(p => (p.ciRefit.low !== null ? p.y - p.ciRefit.low : null)),
@@ -1439,7 +1506,7 @@
                                 thickness: 1,
                                 width: 2
                             } : undefined,
-                            hovertemplate: '<b>%{hovertext}</b><br>Fixed: %{x:.1f} %{customdata[0]}<br>Refit: %{y:.1f} %{customdata[1]}<extra></extra>',
+                            hovertemplate: hoverTemplate,
                             customdata: points.map(p => [
                                 p.ciFixed.low ? `[${p.ciFixed.low.toFixed(1)}, ${p.ciFixed.high.toFixed(1)}]` : '',
                                 p.ciRefit.low ? `[${p.ciRefit.low.toFixed(1)}, ${p.ciRefit.high.toFixed(1)}]` : ''
@@ -1447,10 +1514,16 @@
                         });
                     });
 
-                    layout.title.text = 'Comparison: Fixed vs. Refit ECI';
-                    layout.xaxis.title.text = 'Fixed Parameters ECI';
-                    layout.yaxis.title.text = 'Refit (JMLE) ECI';
-                    status.innerText = `Comparing ${rawPoints.length} models.`;
+                    if (state.mode === 'rank-compare') {
+                        layout.title.text = 'Comparison: Fixed vs. Refit Ranks';
+                        layout.xaxis.title.text = 'Fixed Parameters Rank (1=Best)';
+                        layout.yaxis.title.text = 'Refit (JMLE) Rank (1=Best)';
+                    } else {
+                        layout.title.text = 'Comparison: Fixed vs. Refit ECI';
+                        layout.xaxis.title.text = 'Fixed Parameters ECI';
+                        layout.yaxis.title.text = 'Refit (JMLE) ECI';
+                        status.innerText = `Comparing ${rawPoints.length} models.`;
+                    }
 
                 } else {
                     const rawPoints = []; // {id, x (time), y, count, name}
@@ -1768,12 +1841,13 @@
                 if (state.mode === 'fixed') header = ['Model', 'Date', 'Fixed_ECI', 'Included_Benchmarks'];
                 else if (state.mode === 'refit') header = ['Model', 'Date', 'Refit_ECI', 'Included_Benchmarks'];
                 else if (state.mode === 'compare') header = ['Model', 'Date', 'Fixed_ECI', 'Refit_ECI', 'Included_Benchmarks'];
+                else if (state.mode === 'rank-compare') header = ['Model', 'Date', 'Fixed_Rank', 'Refit_Rank', 'Included_Benchmarks'];
 
                 rows.push(header);
 
                 // Pre-calc JMLE if needed
                 let refitScores = {};
-                if (state.mode === 'refit' || state.mode === 'compare') {
+                if (state.mode === 'refit' || state.mode === 'compare' || state.mode === 'rank-compare') {
                     const res = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
                     refitScores = res.ability || {};
                 }
@@ -1792,7 +1866,7 @@
                     });
 
                     // Calc fixed if needed
-                    if (state.mode === 'fixed' || state.mode === 'compare') {
+                    if (state.mode === 'fixed' || state.mode === 'compare' || state.mode === 'rank-compare') {
                         const perfs = [], diffs = [], discs = [];
                         activeBenchmarks.forEach(bId => {
                             if (RAW_DATA.performances[id] && RAW_DATA.performances[id][bId] !== undefined) {
@@ -1807,7 +1881,7 @@
                         }
                     }
 
-                    if (state.mode === 'refit' || state.mode === 'compare') {
+                    if (state.mode === 'refit' || state.mode === 'compare' || state.mode === 'rank-compare') {
                         refitVal = refitScores[id];
                     }
 
@@ -1822,8 +1896,62 @@
                         if (fixedVal !== null && refitVal !== undefined) {
                             rows.push([`"${m.name}"`, m.date, fixedVal.toFixed(2), refitVal.toFixed(2), benchString]);
                         }
+                    } else if (state.mode === 'rank-compare') {
+                        // We need to re-compute ranks globally for export, but this function iterates per model.
+                        // Better approach: collect all valid pairs first, sort, rank, then export.
+                        // For simplicity in this patch, we skip complex re-ranking inside the export loop
+                        // or assume the user just wants the filtered data.
+                        // Actually, without sorting the whole set, we can't export ranks easily here efficiently without refactoring.
+                        // Let's just export the scores for now or do a quick re-calculation.
+                        // Since exportData is async, we can do it properly.
                     }
                 });
+
+                if (state.mode === 'rank-compare') {
+                    // Post-process for Rank Compare Export
+                    // Gather all valid models
+                    const validModels = [];
+                     modelIds.forEach(id => {
+                        const m = RAW_DATA.models[id];
+                        let f = null;
+                        // ... (re-calc fixed) - wait, this is inefficient to duplicate code.
+                        // Given the architecture, let's just piggyback on what we have.
+                        // Let's restart the loop properly for Rank Compare.
+                     });
+
+                     // Actually, let's just simplify and export the table data if possible?
+                     // But table data is not stored in state.
+
+                     // Re-implement simplified rank logic for export
+                     const data = [];
+                     modelIds.forEach(id => {
+                        // ... calc fixedVal and refitVal ...
+                        const perfs = [], diffs = [], discs = [];
+                        activeBenchmarks.forEach(bId => {
+                            if (RAW_DATA.performances[id] && RAW_DATA.performances[id][bId] !== undefined) {
+                                perfs.push(RAW_DATA.performances[id][bId]);
+                                diffs.push(RAW_DATA.benchmarks[bId].diff);
+                                discs.push(RAW_DATA.benchmarks[bId].disc);
+                            }
+                        });
+                        let f = null;
+                        if (perfs.length >= state.minBenchmarks) f = solveFixed(perfs, diffs, discs);
+                        let r = refitScores[id];
+
+                        if (f !== null && r !== undefined) {
+                            data.push({ id, name: RAW_DATA.models[id].name, date: RAW_DATA.models[id].date, f, r,
+                                benches: activeBenchmarks.filter(b => RAW_DATA.performances[id][b] !== undefined).map(b => RAW_DATA.benchmarks[b].name).join('; ')
+                            });
+                        }
+                     });
+
+                     data.sort((a,b) => b.f - a.f).forEach((d,i) => d.fRank = i+1);
+                     data.sort((a,b) => b.r - a.r).forEach((d,i) => d.rRank = i+1);
+
+                     data.forEach(d => {
+                         rows.push([`"${d.name}"`, d.date, d.fRank, d.rRank, `"${d.benches}"`]);
+                     });
+                }
 
                 // Generate CSV
                 const csvContent = rows.map(r => r.join(",")).join("\n");
@@ -1904,7 +2032,7 @@
                 });
 
                 // Mode switching
-                const modes = ['fixed', 'refit', 'compare'];
+                const modes = ['fixed', 'refit', 'compare', 'rank-compare'];
 
                 function updateModeUI(selectedMode) {
                     modes.forEach(m => {
