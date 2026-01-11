@@ -142,7 +142,7 @@
                 class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
                 <input type="checkbox" id="show-breakpoint-toggle"
                     class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
-                <span class="text-sm font-medium text-gray-700">Breakpoint Analysis</span>
+                <span class="text-sm font-medium text-gray-700">Frontier Breakpoint Analysis</span>
             </label>
             <label
                 class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
@@ -198,7 +198,7 @@
                       </div>
 
                       <div class="flex items-center justify-between">
-                          <span class="text-sm font-medium text-gray-700">Breakpoint Analysis</span>
+                          <span class="text-sm font-medium text-gray-700">Frontier Breakpoint Analysis</span>
                           <input type="checkbox" id="mobile-show-breakpoint-toggle" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
                      </div>
 
@@ -323,7 +323,7 @@
                     <div id="chart-container" class="w-full h-full"></div>
                 </div>
                 <div id="breakpoint-stats" class="w-full bg-white border-t border-gray-200 p-4 text-xs hidden z-10 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-                    <h3 id="stats-title" class="font-bold text-gray-800 mb-2 border-b pb-1 inline-block mr-4">Breakpoint Analysis</h3>
+                    <h3 id="stats-title" class="font-bold text-gray-800 mb-2 border-b pb-1 inline-block mr-4">Frontier Breakpoint Analysis</h3>
                     <div id="breakpoint-content" class="text-gray-600 inline-block"></div>
                 </div>
             </div>
@@ -1699,7 +1699,7 @@
                     if (state.showBreakpoint && rawPoints.length > 5) {
                         bpStatsDiv.classList.remove('hidden');
                         const titleEl = document.getElementById('stats-title');
-                        if (titleEl) titleEl.innerText = "Breakpoint Analysis";
+                        if (titleEl) titleEl.innerText = "Frontier Breakpoint Analysis";
                         status.innerText = "Running statistical analysis...";
 
                         await new Promise(r => setTimeout(r, 10));

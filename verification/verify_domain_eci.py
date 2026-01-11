@@ -9,7 +9,7 @@ def verify(page):
     page.goto(f"file://{cwd}/domain_eci.html")
     page.wait_for_timeout(1000)
 
-    page.get_by_label("Breakpoint Analysis").check()
+    page.get_by_label("Frontier Breakpoint Analysis").check()
     page.wait_for_timeout(1000)
 
     # Inject data centered around theta=100 (diff=100)
