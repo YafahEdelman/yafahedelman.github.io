@@ -1771,13 +1771,22 @@
                             const dSplit = new Date(splitX).toISOString().split('T')[0];
 
                             const diff = bicLin - bicBp; // Positive means Breakpoint better
-                            let evidence = "Weak/Inconclusive";
-                            if (diff < -10) evidence = "Very Strong (Linear)";
-                            else if (diff < -6) evidence = "Strong (Linear)";
-                            else if (diff < -2) evidence = "Positive (Linear)";
-                            else if (diff > 10) evidence = "Very Strong (Breakpoint)";
-                            else if (diff > 6) evidence = "Strong (Breakpoint)";
-                            else if (diff > 2) evidence = "Positive (Breakpoint)";
+
+                            // Likelihood Ratio (approx Bayes Factor)
+                            const lr = Math.exp(Math.abs(diff) / 2);
+                            let lrText = "";
+                            if (lr >= 1000) lrText = ">1000x";
+                            else if (lr >= 100) lrText = Math.round(lr) + "x";
+                            else if (lr >= 10) lrText = lr.toFixed(1) + "x";
+                            else lrText = lr.toFixed(2) + "x";
+
+                            let evidence = `Weak/Inconclusive (LR: ${lrText})`;
+                            if (diff < -10) evidence = `Very Strong (Linear) - LR: ${lrText}`;
+                            else if (diff < -6) evidence = `Strong (Linear) - LR: ${lrText}`;
+                            else if (diff < -2) evidence = `Positive (Linear) - LR: ${lrText}`;
+                            else if (diff > 10) evidence = `Very Strong (Breakpoint) - LR: ${lrText}`;
+                            else if (diff > 6) evidence = `Strong (Breakpoint) - LR: ${lrText}`;
+                            else if (diff > 2) evidence = `Positive (Breakpoint) - LR: ${lrText}`;
 
                             // Growth Factors
                             const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
