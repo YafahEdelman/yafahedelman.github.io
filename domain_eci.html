@@ -133,6 +133,10 @@
                     class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all">
                     Compare
                 </button>
+                <button id="mode-breakpoint"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all">
+                    Breakpoint
+                </button>
             </div>
             <label
                 class="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-100 transition-colors">
@@ -179,6 +183,7 @@
                         <button id="mobile-mode-fixed" class="px-3 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-gray-100 text-gray-900">Fixed Parameters</button>
                         <button id="mobile-mode-refit" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Refit (JMLE)</button>
                         <button id="mobile-mode-compare" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Compare</button>
+                        <button id="mobile-mode-breakpoint" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-50">Breakpoint</button>
                      </div>
 
                      <div class="flex items-center justify-between">
@@ -292,8 +297,13 @@
                 </div>
             </div>
 
-            <div class="flex-1 p-2 lg:p-6" id="chart-container">
+            <div class="flex-1 p-2 lg:p-6 relative" id="chart-wrapper">
                 <!-- Plotly Chart -->
+                <div id="chart-container" class="w-full h-full"></div>
+                <div id="breakpoint-stats" class="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200 text-xs hidden z-10 max-w-xs">
+                    <h3 class="font-bold text-gray-800 mb-2 border-b pb-1">Breakpoint Analysis</h3>
+                    <div id="breakpoint-content" class="space-y-1.5 text-gray-600"></div>
+                </div>
             </div>
             <div class="flex-1 p-6 hidden overflow-auto custom-scrollbar" id="table-container">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -711,6 +721,105 @@
                 // Return empty to avoid crash
                 return {};
             }
+        }
+
+        // --- Breakpoint Analysis Logic ---
+
+        function linearRegression(points) {
+            const n = points.length;
+            if (n < 2) return null;
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            points.forEach(p => {
+                sumX += p.x;
+                sumY += p.y;
+                sumXY += p.x * p.y;
+                sumXX += p.x * p.x;
+            });
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+
+            let rss = 0;
+            points.forEach(p => {
+                const pred = slope * p.x + intercept;
+                rss += (p.y - pred) ** 2;
+            });
+
+            return { slope, intercept, rss, n, k: 2 }; // k=2 (slope + intercept)
+        }
+
+        function calculateBIC(n, k, rss) {
+            if (rss <= 0) return -Infinity; // Should not happen ideally
+            return n * Math.log(rss / n) + k * Math.log(n);
+        }
+
+        function breakpointRegression(points) {
+            // Points must be sorted by x
+            const n = points.length;
+            if (n < 6) return null; // Need min points per segment
+
+            let bestResult = { totalRSS: Infinity };
+            const minSegment = 3; // Min points per segment
+
+            for (let i = minSegment; i <= n - minSegment; i++) {
+                const seg1 = points.slice(0, i);
+                const seg2 = points.slice(i);
+
+                const reg1 = linearRegression(seg1);
+                const reg2 = linearRegression(seg2);
+
+                if (reg1 && reg2) {
+                    const totalRSS = reg1.rss + reg2.rss;
+                    if (totalRSS < bestResult.totalRSS) {
+                        bestResult = {
+                            totalRSS,
+                            splitIndex: i,
+                            splitPoint: points[i], // The first point of the second segment
+                            reg1,
+                            reg2,
+                            k: 5 // 2 slopes + 2 intercepts + 1 breakpoint parameter
+                        };
+                    }
+                }
+            }
+            return bestResult.totalRSS === Infinity ? null : bestResult;
+        }
+
+        function bootstrapBreakpoint(points, n_boot = 100) {
+            // 1. Get Best Fit
+            const best = breakpointRegression(points);
+            if (!best) return null;
+
+            // 2. Calculate Residuals
+            const residuals = points.map((p, i) => {
+                let pred;
+                if (i < best.splitIndex) pred = best.reg1.slope * p.x + best.reg1.intercept;
+                else pred = best.reg2.slope * p.x + best.reg2.intercept;
+                return p.y - pred;
+            });
+
+            // 3. Bootstrap
+            const splitDates = [];
+            for (let b = 0; b < n_boot; b++) {
+                const synthPoints = points.map((p, i) => {
+                    // Resample residual
+                    const r = residuals[Math.floor(Math.random() * residuals.length)];
+                    let pred;
+                    if (i < best.splitIndex) pred = best.reg1.slope * p.x + best.reg1.intercept;
+                    else pred = best.reg2.slope * p.x + best.reg2.intercept;
+                    return { x: p.x, y: pred + r };
+                });
+
+                // Re-run search
+                const bootRes = breakpointRegression(synthPoints);
+                if (bootRes) splitDates.push(bootRes.splitPoint.x);
+            }
+
+            if (splitDates.length === 0) return null;
+            splitDates.sort((a, b) => a - b);
+            const low = splitDates[Math.floor(splitDates.length * 0.05)];
+            const high = splitDates[Math.floor(splitDates.length * 0.95)];
+
+            return { low, high, median: splitDates[Math.floor(splitDates.length * 0.5)] };
         }
 
         // --- UI Rendering ---
@@ -1201,7 +1310,7 @@
                     }
 
                     if (state.view === 'table') {
-                        document.getElementById('chart-container').classList.add('hidden');
+                        document.getElementById('chart-wrapper').classList.add('hidden');
                         document.getElementById('table-container').classList.remove('hidden');
                         renderTable(rawPoints, 'compare');
                         status.innerText = `Showing ${rawPoints.length} models in table.`;
@@ -1210,7 +1319,7 @@
                     }
 
                     document.getElementById('table-container').classList.add('hidden');
-                    document.getElementById('chart-container').classList.remove('hidden');
+                    document.getElementById('chart-wrapper').classList.remove('hidden');
 
                     // Smart Labeling
                     const labelPositions = selectNonOverlappingLabels(rawPoints, xRange, yRange, isMobile);
@@ -1288,7 +1397,8 @@
                     const rawPoints = []; // {id, x (time), y, count, name}
                     const isFixed = state.mode === 'fixed';
 
-                    if (state.mode === 'fixed') {
+                    // For breakpoint analysis, default to fixed scores for stability
+                    if (state.mode === 'fixed' || state.mode === 'breakpoint') {
                         Object.keys(RAW_DATA.models).forEach(modelId => {
                             const m = RAW_DATA.models[modelId];
                             if (!m.date) return;
@@ -1370,7 +1480,7 @@
                     }
 
                     if (state.view === 'table') {
-                        document.getElementById('chart-container').classList.add('hidden');
+                        document.getElementById('chart-wrapper').classList.add('hidden');
                         document.getElementById('table-container').classList.remove('hidden');
                         renderTable(rawPoints, state.mode);
                         status.innerText = `Showing ${rawPoints.length} models in table.`;
@@ -1379,7 +1489,7 @@
                     }
 
                     document.getElementById('table-container').classList.add('hidden');
-                    document.getElementById('chart-container').classList.remove('hidden');
+                    document.getElementById('chart-wrapper').classList.remove('hidden');
 
                     // Smart Labels
                     let xRange = [0, 1], yRange = [0, 1];
@@ -1400,6 +1510,125 @@
 
                     //Sort by date for line connection if we wanted lines (here strictly markers)
                     rawPoints.sort((a, b) => a.x - b.x);
+
+                    // Breakpoint Analysis
+                    const bpStatsDiv = document.getElementById('breakpoint-stats');
+                    const bpContentDiv = document.getElementById('breakpoint-content');
+
+                    if (state.mode === 'breakpoint') {
+                        bpStatsDiv.classList.remove('hidden');
+                        status.innerText = "Running statistical analysis...";
+
+                        // Wait for UI render
+                        await new Promise(r => setTimeout(r, 10));
+
+                        const lin = linearRegression(rawPoints);
+                        const bp = breakpointRegression(rawPoints);
+
+                        if (lin && bp) {
+                            const bicLin = calculateBIC(lin.n, lin.k, lin.rss);
+                            const bicBp = calculateBIC(rawPoints.length, bp.k, bp.totalRSS);
+
+                            // Bootstrap CI if breakpoint is better
+                            let ciText = "";
+                            let ci = null;
+                            if (bicBp < bicLin - 2) { // Strong evidence
+                                ci = bootstrapBreakpoint(rawPoints, 100); // 100 for speed
+                                if (ci) {
+                                    const dLow = new Date(ci.low).toISOString().split('T')[0];
+                                    const dHigh = new Date(ci.high).toISOString().split('T')[0];
+                                    ciText = `90% CI: ${dLow} to ${dHigh}`;
+                                }
+                            }
+
+                            const dSplit = new Date(bp.splitPoint.x).toISOString().split('T')[0];
+                            const diff = bicLin - bicBp;
+                            let evidence = "Weak/None";
+                            if (diff > 2) evidence = "Positive";
+                            if (diff > 6) evidence = "Strong";
+                            if (diff > 10) evidence = "Very Strong";
+
+                            bpContentDiv.innerHTML = `
+                                <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                                    <span class="text-gray-500">Linear BIC:</span>
+                                    <span class="font-mono text-right">${bicLin.toFixed(1)}</span>
+                                    <span class="text-gray-500">Break BIC:</span>
+                                    <span class="font-mono text-right font-bold text-indigo-600">${bicBp.toFixed(1)}</span>
+                                    <span class="text-gray-500">Delta BIC:</span>
+                                    <span class="font-mono text-right text-green-600">+${diff.toFixed(1)}</span>
+                                    <span class="text-gray-500">Evidence:</span>
+                                    <span class="text-right font-medium">${evidence}</span>
+                                    <span class="text-gray-500">Split Date:</span>
+                                    <span class="text-right font-bold text-gray-900">${dSplit}</span>
+                                </div>
+                                ${ciText ? `<div class="mt-1 pt-1 border-t border-gray-100 text-gray-400 text-[10px]">${ciText}</div>` : ''}
+                            `;
+
+                            // Add Lines to Plot
+                            // 1. Linear (Dashed)
+                            const xMin = xRange[0], xMax = xRange[1];
+                            plotData.push({
+                                x: [new Date(xMin).toISOString(), new Date(xMax).toISOString()],
+                                y: [lin.slope * xMin + lin.intercept, lin.slope * xMax + lin.intercept],
+                                mode: 'lines', type: 'scatter', name: 'Linear Fit',
+                                line: { dash: 'dot', color: '#9ca3af', width: 2 },
+                                hoverinfo: 'none'
+                            });
+
+                            // 2. Breakpoint (Solid)
+                            if (bicBp < bicLin) { // Only show if better
+                                const splitX = bp.splitPoint.x;
+                                const ySplitLeft = bp.reg1.slope * splitX + bp.reg1.intercept;
+                                const ySplitRight = bp.reg2.slope * splitX + bp.reg2.intercept; // Should match ySplitLeft approx
+
+                                // Seg 1: Min to Split
+                                plotData.push({
+                                    x: [new Date(xMin).toISOString(), new Date(splitX).toISOString()],
+                                    y: [bp.reg1.slope * xMin + bp.reg1.intercept, ySplitLeft],
+                                    mode: 'lines', type: 'scatter', name: 'Pre-Break',
+                                    line: { color: '#4f46e5', width: 3 },
+                                    hoverinfo: 'none'
+                                });
+                                // Seg 2: Split to Max
+                                plotData.push({
+                                    x: [new Date(splitX).toISOString(), new Date(xMax).toISOString()],
+                                    y: [ySplitRight, bp.reg2.slope * xMax + bp.reg2.intercept],
+                                    mode: 'lines', type: 'scatter', name: 'Post-Break',
+                                    line: { color: '#ec4899', width: 3 },
+                                    hoverinfo: 'none'
+                                });
+
+                                // Vertical line for CI
+                                if (ci) {
+                                     layout.shapes = [
+                                        {
+                                            type: 'rect',
+                                            xref: 'x', yref: 'paper',
+                                            x0: new Date(ci.low).toISOString(),
+                                            x1: new Date(ci.high).toISOString(),
+                                            y0: 0, y1: 1,
+                                            fillcolor: '#4f46e5',
+                                            opacity: 0.1,
+                                            line: { width: 0 }
+                                        },
+                                        {
+                                            type: 'line',
+                                            xref: 'x', yref: 'paper',
+                                            x0: new Date(splitX).toISOString(),
+                                            x1: new Date(splitX).toISOString(),
+                                            y0: 0, y1: 1,
+                                            line: { color: '#4f46e5', width: 1, dash: 'dash' }
+                                        }
+                                     ];
+                                }
+                            }
+                        } else {
+                            bpContentDiv.innerText = "Insufficient data for analysis.";
+                        }
+                        status.innerText = "Analysis complete.";
+                    } else {
+                        bpStatsDiv.classList.add('hidden');
+                    }
 
                     // Group by Organization
                     const orgGroups = {};
@@ -1614,7 +1843,7 @@
                 });
 
                 // Mode switching
-                const modes = ['fixed', 'refit', 'compare'];
+                const modes = ['fixed', 'refit', 'compare', 'breakpoint'];
 
                 function updateModeUI(selectedMode) {
                     modes.forEach(m => {
