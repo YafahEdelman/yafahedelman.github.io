@@ -839,7 +839,7 @@
 
             points.sort((a, b) => a.x - b.x);
             let best = { rss: Infinity };
-            const minPoints = 3;
+            const minPoints = 1;
 
             for (let i = minPoints; i < n - minPoints; i++) {
                 const candidateX = points[i].x;
