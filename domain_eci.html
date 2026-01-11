@@ -1276,8 +1276,8 @@
                         text: isMobile ? undefined : 'Model Capability (ECI) over Time',
                         font: { family: 'Inter', size: 22, weight: 900, color: '#111827' }
                     },
-                    xaxis: { title: { text: 'Release Date', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
-                    yaxis: { title: { text: 'Domain-specific ECI', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
+                    xaxis: { title: { text: 'Release Date', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true, fixedrange: isMobile },
+                    yaxis: { title: { text: 'Domain-specific ECI', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true, fixedrange: isMobile },
                     hovermode: 'closest',
                     template: 'plotly_white',
                     margin: isMobile ? { t: 20, r: 40, l: 40, b: 40 } : { t: 90, r: 50, l: 80, b: 100 },
