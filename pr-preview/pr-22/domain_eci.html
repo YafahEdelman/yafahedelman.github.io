@@ -1244,17 +1244,17 @@
                 const isMobile = window.innerWidth < 1024;
                 let layout = {
                     title: {
-                        text: 'Model Capability (ECI) over Time',
-                        font: { family: 'Inter', size: isMobile ? 16 : 22, weight: 900, color: '#111827' }
+                        text: isMobile ? undefined : 'Model Capability (ECI) over Time',
+                        font: { family: 'Inter', size: 22, weight: 900, color: '#111827' }
                     },
                     xaxis: { title: { text: 'Release Date', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     yaxis: { title: { text: 'Domain-specific ECI', font: { weight: 600 } }, gridcolor: '#f3f4f6', zeroline: false, automargin: true },
                     hovermode: 'closest',
                     template: 'plotly_white',
-                    margin: isMobile ? { t: 140, r: 40, l: 40, b: 40 } : { t: 90, r: 50, l: 80, b: 100 },
+                    margin: isMobile ? { t: 20, r: 40, l: 40, b: 120 } : { t: 90, r: 50, l: 80, b: 100 },
                     legend: {
                         orientation: 'h',
-                        y: isMobile ? 1.05 : -0.15,
+                        y: isMobile ? -0.3 : -0.15,
                         x: 0.5,
                         xanchor: 'center',
                         font: { size: isMobile ? 10 : 13, weight: 500 }
@@ -1565,11 +1565,11 @@
                     });
 
                     if (state.mode === 'rank-compare') {
-                        layout.title.text = 'Comparison: Fixed vs. Refit Ranks';
+                        if (!isMobile) layout.title.text = 'Comparison: Fixed vs. Refit Ranks';
                         layout.xaxis.title.text = 'Fixed Parameters Rank (1=Best)';
                         layout.yaxis.title.text = 'Refit (JMLE) Rank (1=Best)';
                     } else {
-                        layout.title.text = 'Comparison: Fixed vs. Refit ECI';
+                        if (!isMobile) layout.title.text = 'Comparison: Fixed vs. Refit ECI';
                         layout.xaxis.title.text = 'Fixed Parameters ECI';
                         layout.yaxis.title.text = 'Refit (JMLE) ECI';
                         status.innerText = `Comparing ${rawPoints.length} models.`;
