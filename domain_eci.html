@@ -1713,10 +1713,9 @@
 
                             let ciText = "";
                             let ci = null;
-                            if (bicBp < bicLin + 2) {
-                                // Bootstrap using FULL data (rawPoints)
-                                ci = bootstrapFrontier(rawPoints, 1000);
-                            }
+                            // Bootstrap using FULL data (rawPoints)
+                            // We always calculate CI if we are showing breakpoint analysis, per user request
+                            ci = bootstrapFrontier(rawPoints, 1000);
 
                             if (ci) {
                                 const dLow = new Date(ci.low).toISOString().split('T')[0];
@@ -1728,11 +1727,14 @@
                             const splitX = ci ? ci.median : bp.splitX;
                             const dSplit = new Date(splitX).toISOString().split('T')[0];
 
-                            const diff = bicLin - bicBp;
-                            let evidence = "Weak/None";
-                            if (diff > 2) evidence = "Positive";
-                            if (diff > 6) evidence = "Strong";
-                            if (diff > 10) evidence = "Very Strong";
+                            const diff = bicLin - bicBp; // Positive means Breakpoint better
+                            let evidence = "Weak/Inconclusive";
+                            if (diff < -10) evidence = "Very Strong (Linear)";
+                            else if (diff < -6) evidence = "Strong (Linear)";
+                            else if (diff < -2) evidence = "Positive (Linear)";
+                            else if (diff > 10) evidence = "Very Strong (Breakpoint)";
+                            else if (diff > 6) evidence = "Strong (Breakpoint)";
+                            else if (diff > 2) evidence = "Positive (Breakpoint)";
 
                             // Growth Factors
                             const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
