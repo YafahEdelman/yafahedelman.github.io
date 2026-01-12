@@ -175,18 +175,29 @@ Important:
                 if (!response.ok) throw new Error('AI service failed to respond.');
 
                 let text = await response.text();
+                console.log("Raw AI Response:\n", text);
 
-                // Sanitization
-                text = text.replace(/```javascript/g, '').replace(/```/g, '').trim();
+                // 1. Try to extract from Markdown block first (most robust)
+                const mdMatch = text.match(/```(?:javascript|js)?\s*([\s\S]*?)```/);
+                if (mdMatch && mdMatch[1]) {
+                    text = mdMatch[1].trim();
+                } else {
+                    // 2. Fallback: If no markdown, try to find the start of the function
+                    const funcStart = text.indexOf('function getChartConfig');
+                    if (funcStart !== -1) {
+                         text = text.substring(funcStart);
+                    } else {
+                         // 3. Last resort: If it looks like a returned object, wrap it
+                         if (text.includes('return {')) {
+                             text = `function getChartConfig(data) { ${text} }`;
+                         }
+                    }
+                }
 
-                console.log("Generated Code:\n", text);
+                console.log("Processed Code:\n", text);
 
                 if (!text.includes('function getChartConfig')) {
-                     if (text.includes('return {')) {
-                         text = `function getChartConfig(data) { ${text} }`;
-                     } else {
-                         throw new Error("AI did not return a valid function.");
-                     }
+                     throw new Error("AI did not return a valid function definition.");
                 }
 
                 // Execution
