@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US Major Grid Additions & Interconnect Requests</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet MarkerCluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .leaflet-container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-dvh overflow-hidden flex flex-col relative">
+
+    <!-- Header -->
+    <div class="bg-white shadow-md p-4 z-20 flex justify-between items-center">
+        <div>
+            <h1 class="text-lg font-bold text-gray-800">Grid Additions Map</h1>
+            <p class="text-xs text-gray-500">Locate potential data center sites</p>
+        </div>
+        <button id="menu-toggle" class="md:hidden text-gray-600 focus:outline-none">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+            </svg>
+        </button>
+    </div>
+
+    <div class="flex-1 relative flex">
+        <!-- Map Container -->
+        <div id="map" class="flex-1 w-full h-full z-0"></div>
+
+        <!-- Sidebar / Drawer -->
+        <div id="sidebar" class="absolute inset-y-0 right-0 w-80 bg-white shadow-xl transform translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30 flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center md:hidden">
+                <h2 class="font-bold">Controls</h2>
+                <button id="close-sidebar" class="text-gray-500">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-4 overflow-y-auto flex-1 space-y-4">
+
+                <!-- Filters -->
+                <div>
+                    <h3 class="font-semibold mb-2 text-sm text-gray-700">Filter by Type</h3>
+                    <div id="type-filters" class="space-y-2">
+                        <!-- Checkboxes will be injected here -->
+                    </div>
+                </div>
+
+                <div class="mt-4 border-t pt-4">
+                    <h3 class="font-semibold mb-2 text-sm text-gray-700">Filter by Capacity (MW)</h3>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" id="min-capacity" placeholder="Min" class="w-20 p-1 border rounded text-sm">
+                        <span class="text-gray-500">-</span>
+                        <input type="number" id="max-capacity" placeholder="Max" class="w-20 p-1 border rounded text-sm">
+                    </div>
+                </div>
+
+                <div class="mt-4 border-t pt-4">
+                    <h3 class="font-semibold mb-2 text-sm text-gray-700">Filter by Year</h3>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" id="min-year" placeholder="Min" class="w-20 p-1 border rounded text-sm">
+                        <span class="text-gray-500">-</span>
+                        <input type="number" id="max-year" placeholder="Max" class="w-20 p-1 border rounded text-sm">
+                    </div>
+                </div>
+
+
+                <!-- Stats -->
+                <div class="pt-4 border-t">
+                    <h3 class="font-semibold mb-2 text-sm text-gray-700">Statistics</h3>
+                    <div id="stats-content" class="text-sm text-gray-600">
+                        Loading...
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="pt-4 border-t text-xs text-gray-400">
+                    Data sources: Global Energy Monitor (CC BY 4.0); EIA 860M Preliminary Monthly Electric Generator Inventory (Nov 2025)
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Overlay -->
+    <div id="overlay" class="fixed inset-0 bg-black opacity-50 z-20 hidden md:hidden"></div>
+
+    <!-- Data Source -->
+    <script src="grid_data.js"></script>
+
+    <!-- Map Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- UI Interaction ---
+            const menuToggle = document.getElementById('menu-toggle');
+            const sidebar = document.getElementById('sidebar');
+            const closeSidebar = document.getElementById('close-sidebar');
+            const overlay = document.getElementById('overlay');
+
+            function toggleSidebar() {
+                const isHidden = sidebar.classList.contains('translate-x-full');
+                if (isHidden) {
+                    sidebar.classList.remove('translate-x-full');
+                    overlay.classList.remove('hidden');
+                } else {
+                    sidebar.classList.add('translate-x-full');
+                    overlay.classList.add('hidden');
+                }
+            }
+
+            menuToggle.addEventListener('click', toggleSidebar);
+            closeSidebar.addEventListener('click', toggleSidebar);
+            overlay.addEventListener('click', toggleSidebar);
+
+            // --- Map Initialization ---
+            const map = L.map('map').setView([39.8283, -98.5795], 4); // Center of US
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            const markers = L.markerClusterGroup();
+            map.addLayer(markers);
+
+            // Global state
+            let allData = window.GRID_DATA || [];
+            let currentData = [...allData];
+            let typeFilters = new Set();
+
+            // Inputs
+            const minCapacityInput = document.getElementById('min-capacity');
+            const maxCapacityInput = document.getElementById('max-capacity');
+            const minYearInput = document.getElementById('min-year');
+            const maxYearInput = document.getElementById('max-year');
+
+            // --- Logic ---
+
+            function getStatusColor(status) {
+                if (!status) return 'gray';
+                const s = status.toLowerCase();
+                if (s.includes('operational')) return 'green';
+                if (s.includes('construction')) return 'orange';
+                if (s.includes('planned') || s.includes('approved')) return 'blue';
+                return 'gray';
+            }
+
+            function getTypeColor(type) {
+                if (!type) return 'gray';
+                const t = type.toLowerCase();
+                if (t.includes('solar')) return '#facc15'; // yellow-400
+                if (t.includes('wind')) return '#3b82f6'; // blue-500
+                if (t.includes('storage')) return '#a855f7'; // purple-500
+                return '#ef4444'; // red-500
+            }
+
+            function renderMap() {
+                markers.clearLayers();
+
+                const bounds = L.latLngBounds();
+                let hasPoints = false;
+
+                currentData.forEach(project => {
+                    const lat = parseFloat(project.Latitude);
+                    const lon = parseFloat(project.Longitude);
+
+                    if (isNaN(lat) || isNaN(lon)) return;
+
+                    const marker = L.marker([lat, lon]);
+
+                    const popupContent = `
+                        <div class="p-2 min-w-[200px]">
+                            <h3 class="font-bold text-base mb-1">${project["Project Name"] || 'Unknown Project'}</h3>
+                            <div class="text-sm space-y-1">
+                                <p><span class="font-semibold">Capacity:</span> ${project["Capacity (MW)"] || 'N/A'} MW</p>
+                                <p><span class="font-semibold">Type:</span> ${project["Type"] || 'N/A'}</p>
+                                <p><span class="font-semibold">Status:</span> <span class="px-2 py-0.5 rounded text-white text-xs" style="background-color: ${getStatusColor(project["Status"])}">${project["Status"] || 'Unknown'}</span></p>
+                                <p><span class="font-semibold">Developer:</span> ${project["Developer"] || 'N/A'}</p>
+                                <p><span class="font-semibold">Location:</span> ${project["State"] || ''} (${lat.toFixed(2)}, ${lon.toFixed(2)})</p>
+                            </div>
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupContent);
+                    markers.addLayer(marker);
+                    bounds.extend([lat, lon]);
+                    hasPoints = true;
+                });
+
+                if (hasPoints) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+            }
+
+            function updateStats() {
+                const totalMW = currentData.reduce((sum, p) => sum + (parseFloat(p["Capacity (MW)"]) || 0), 0);
+                const count = currentData.length;
+
+                const statsHtml = `
+                    <p>Total Projects: <span class="font-bold">${count}</span></p>
+                    <p>Total Capacity: <span class="font-bold">${(totalMW / 1000).toFixed(2)} GW</span></p>
+                `;
+                document.getElementById('stats-content').innerHTML = statsHtml;
+            }
+
+            function initFilters() {
+                const container = document.getElementById('type-filters');
+                container.innerHTML = '';
+
+                // Get unique types
+                const types = [...new Set(allData.map(d => d.Type).filter(Boolean))].sort();
+
+                types.forEach(type => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = type;
+                    checkbox.checked = true; // Default all checked
+                    checkbox.className = 'h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded';
+
+                    checkbox.addEventListener('change', (e) => {
+                         updateFiltersFromUI();
+                    });
+
+                    const label = document.createElement('label');
+                    label.className = 'ml-2 block text-sm text-gray-900';
+                    label.textContent = type;
+
+                    div.appendChild(checkbox);
+                    div.appendChild(label);
+                    container.appendChild(div);
+                });
+            }
+
+            function initRangeFilters() {
+                // Calculate Min/Max for Capacity
+                const capacities = allData.map(d => parseFloat(d["Capacity (MW)"])).filter(n => !isNaN(n));
+                if (capacities.length > 0) {
+                    const minCap = Math.floor(Math.min(...capacities));
+                    const maxCap = Math.ceil(Math.max(...capacities));
+                    minCapacityInput.placeholder = minCap;
+                    maxCapacityInput.placeholder = maxCap;
+                }
+
+                // Calculate Min/Max for Year
+                const years = allData.map(d => parseInt(d["Year"])).filter(n => !isNaN(n));
+                if (years.length > 0) {
+                    const minYear = Math.min(...years);
+                    const maxYear = Math.max(...years);
+                    minYearInput.placeholder = minYear;
+                    maxYearInput.placeholder = maxYear;
+                }
+
+                // Event Listeners
+                const inputs = [minCapacityInput, maxCapacityInput, minYearInput, maxYearInput];
+                inputs.forEach(input => {
+                    input.addEventListener('input', () => {
+                        applyFilters();
+                    });
+                });
+            }
+
+            function updateFiltersFromUI() {
+                typeFilters.clear();
+                const checkboxes = document.querySelectorAll('#type-filters input[type="checkbox"]');
+                checkboxes.forEach(cb => {
+                    if (cb.checked) typeFilters.add(cb.value);
+                });
+                applyFilters();
+            }
+
+            function applyFilters() {
+                // Get range values
+                const minCapVal = parseFloat(minCapacityInput.value);
+                const maxCapVal = parseFloat(maxCapacityInput.value);
+                const minYearVal = parseInt(minYearInput.value);
+                const maxYearVal = parseInt(maxYearInput.value);
+
+                currentData = allData.filter(project => {
+                    // Type Filter
+                    if (typeFilters.size > 0 && !typeFilters.has(project.Type)) {
+                        return false;
+                    }
+
+                    // Capacity Filter
+                    const cap = parseFloat(project["Capacity (MW)"]);
+                    if (!isNaN(minCapVal) && (isNaN(cap) || cap < minCapVal)) return false;
+                    if (!isNaN(maxCapVal) && (isNaN(cap) || cap > maxCapVal)) return false;
+
+                    // Year Filter
+                    const year = parseInt(project["Year"]);
+                    if (!isNaN(minYearVal) && (isNaN(year) || year < minYearVal)) return false;
+                    if (!isNaN(maxYearVal) && (isNaN(year) || year > maxYearVal)) return false;
+
+                    return true;
+                });
+
+                renderMap();
+                updateStats();
+            }
+
+            // Initial Render
+            initFilters();
+            initRangeFilters();
+            updateFiltersFromUI(); // This triggers applyFilters -> renderMap & updateStats
+
+        });
+    </script>
+</body>
+</html>
