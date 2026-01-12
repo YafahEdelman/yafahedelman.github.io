@@ -219,6 +219,42 @@
             hearts.push({ mesh: heart, life: 1.0, speedY: 1.5 + Math.random() });
         }
 
+        // --- Zzz PARTICLES ---
+        function createZzzTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 48px sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Z', 32, 32);
+            // Add slight outline
+            ctx.strokeStyle = '#88ccff';
+            ctx.lineWidth = 2;
+            ctx.strokeText('Z', 32, 32);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const zzzTexture = createZzzTexture();
+        const zzzMaterial = new THREE.SpriteMaterial({ map: zzzTexture, transparent: true, opacity: 0.8 });
+        const zzzs = [];
+
+        function spawnZzz() {
+            const zzz = new THREE.Sprite(zzzMaterial);
+            zzz.scale.set(0.5, 0.5, 0.5);
+
+            const worldPos = new THREE.Vector3();
+            head.getWorldPosition(worldPos);
+            zzz.position.copy(worldPos);
+            zzz.position.y += 0.8;
+            zzz.position.x += (Math.random() - 0.5) * 0.2;
+
+            scene.add(zzz);
+            zzzs.push({ mesh: zzz, life: 2.0, speedY: 0.8, swayOffset: Math.random() * 10 });
+        }
+
         // --- TOYS ---
         const toys = [];
         const toyMaterials = [
@@ -255,12 +291,13 @@
         createToys();
 
         // --- AI & LOGIC ---
-        let state = 'IDLE'; // IDLE, WALK, PET
+        let state = 'IDLE'; // IDLE, WALK, PET, SLEEP
         let stateTimer = 0;
         let targetPos = new THREE.Vector3();
         let walkSpeed = 2.5;
         let turnSpeed = 3.0;
         let petTimer = 0;
+        let sleepTimer = 0;
 
         function pickRandomPoint() {
             const r = 8 * Math.sqrt(Math.random());
@@ -283,7 +320,7 @@
             const intersects = raycaster.intersectObjects(kittenGroup.children, true);
 
             if (intersects.length > 0) {
-                // Pet the kitten!
+                // Pet/Wake the kitten!
                 state = 'PET';
                 petTimer = 1.5; // Pet for 1.5 seconds
                 spawnHeart();
@@ -312,10 +349,52 @@
                 // Tail wag
                 tailGroup.rotation.y = Math.sin(time * 2) * 0.2;
 
+                // Lerp back to standing pose
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0, 5 * dt);
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0, 5 * dt);
+                leftEye.scale.y = THREE.MathUtils.lerp(leftEye.scale.y, 1, 10 * dt);
+                rightEye.scale.y = THREE.MathUtils.lerp(rightEye.scale.y, 1, 10 * dt);
+                headGroup.position.y = THREE.MathUtils.lerp(headGroup.position.y, 1.8, 5 * dt);
+
                 if (stateTimer <= 0) {
-                    state = 'WALK';
-                    targetPos = pickRandomPoint();
-                    stateTimer = 5.0; // Max walk time before rethinking
+                    // 30% chance to sleep, 70% chance to walk
+                    if (Math.random() < 0.3) {
+                        state = 'SLEEP';
+                        stateTimer = 5.0 + Math.random() * 5.0; // Sleep 5-10s
+                    } else {
+                        state = 'WALK';
+                        targetPos = pickRandomPoint();
+                        stateTimer = 5.0; // Max walk time
+                    }
+                }
+            }
+            else if (state === 'SLEEP') {
+                stateTimer -= dt;
+
+                // Curl/Lower animation
+                // Lower body to floor
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.6, 2 * dt);
+                // Roll slightly
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0.2, 2 * dt);
+                // Lower head
+                headGroup.position.y = THREE.MathUtils.lerp(headGroup.position.y, 1.4, 2 * dt);
+
+                // Close eyes
+                leftEye.scale.y = THREE.MathUtils.lerp(leftEye.scale.y, 0.1, 10 * dt);
+                rightEye.scale.y = THREE.MathUtils.lerp(rightEye.scale.y, 0.1, 10 * dt);
+
+                // Slow breathing
+                body.scale.set(1, 1 + Math.sin(time * 1.5) * 0.03, 1);
+
+                // Stop tail wag
+                tailGroup.rotation.y = THREE.MathUtils.lerp(tailGroup.rotation.y, 0, 2 * dt);
+
+                // Spawn Zzz
+                if (Math.random() < 0.02) spawnZzz();
+
+                if (stateTimer <= 0) {
+                    state = 'IDLE';
+                    stateTimer = 1.0;
                 }
             }
             else if (state === 'WALK') {
@@ -364,8 +443,12 @@
             else if (state === 'PET') {
                 petTimer -= dt;
 
+                // Wake up pose quickly
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0, 5 * dt);
+
                 // Happy purr vibration
-                kittenGroup.position.y = Math.sin(time * 50) * 0.02;
+                kittenGroup.position.y = Math.sin(time * 50) * 0.02; // relative to 0 ideally
+                if(kittenGroup.position.y < 0 && state !== 'SLEEP') kittenGroup.position.y = Math.max(0, kittenGroup.position.y);
 
                 // Close eyes (scale y)
                 leftEye.scale.y = 0.1;
@@ -397,6 +480,20 @@
                 if (h.life <= 0) {
                     scene.remove(h.mesh);
                     hearts.splice(i, 1);
+                }
+            }
+
+            // Update Zzzs
+            for (let i = zzzs.length - 1; i >= 0; i--) {
+                const z = zzzs[i];
+                z.life -= dt;
+                z.mesh.position.y += z.speedY * dt;
+                z.mesh.position.x += Math.sin(time * 2 + z.swayOffset) * 0.01;
+                z.mesh.material.opacity = Math.min(z.life, 0.8);
+
+                if (z.life <= 0) {
+                    scene.remove(z.mesh);
+                    zzzs.splice(i, 1);
                 }
             }
 
