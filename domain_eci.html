@@ -2014,138 +2014,98 @@
 
             try {
                 const activeBenchmarks = Array.from(state.selectedBenchmarks);
-                const modelIds = Object.keys(RAW_DATA.models);
-                const rows = [];
+                // Header is now constant and comprehensive
+                const header = ['Model', 'Date', 'Fixed_ECI', 'Refit_ECI', 'Fixed_Rank', 'Refit_Rank', 'Benchmarks_Count', 'Included_Benchmarks'];
 
-                // Define extraction logic based on mode
-                let header = [];
-                if (state.mode === 'fixed') header = ['Model', 'Date', 'Fixed_ECI', 'Included_Benchmarks'];
-                else if (state.mode === 'refit') header = ['Model', 'Date', 'Refit_ECI', 'Included_Benchmarks'];
-                else if (state.mode === 'compare') header = ['Model', 'Date', 'Fixed_ECI', 'Refit_ECI', 'Included_Benchmarks'];
-                else if (state.mode === 'rank-compare') header = ['Model', 'Date', 'Fixed_Rank', 'Refit_Rank', 'Included_Benchmarks'];
+                // 1. Calculate Refit Scores (Global Context)
+                // We always calculate this now, regardless of mode
+                const refitResult = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+                const refitScores = refitResult.ability || {};
 
-                rows.push(header);
+                // 2. Calculate Fixed Scores & Collect Data
+                let dataRows = [];
 
-                // Pre-calc JMLE if needed
-                let refitScores = {};
-                if (state.mode === 'refit' || state.mode === 'compare' || state.mode === 'rank-compare') {
-                    const res = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
-                    refitScores = res.ability || {};
-                }
+                Object.keys(RAW_DATA.models).forEach(modelId => {
+                    const m = RAW_DATA.models[modelId];
+                    if (!m) return;
 
-                modelIds.forEach(id => {
-                    const m = RAW_DATA.models[id];
-                    let fixedVal = null;
-                    let refitVal = null;
-                    let employedBenchmarks = [];
+                    // Collect benchmarks for this model
+                    const modelBenchmarks = [];
+                    const perfs = [], diffs = [], discs = [];
 
-                    // Identify utilized benchmarks
                     activeBenchmarks.forEach(bId => {
-                        if (RAW_DATA.performances[id] && RAW_DATA.performances[id][bId] !== undefined) {
-                            employedBenchmarks.push(RAW_DATA.benchmarks[bId].name);
+                         if (RAW_DATA.performances[modelId] && RAW_DATA.performances[modelId][bId] !== undefined) {
+                            modelBenchmarks.push(RAW_DATA.benchmarks[bId].name);
+                            perfs.push(RAW_DATA.performances[modelId][bId]);
+                            diffs.push(RAW_DATA.benchmarks[bId].diff);
+                            discs.push(RAW_DATA.benchmarks[bId].disc);
                         }
                     });
 
-                    // Calc fixed if needed
-                    if (state.mode === 'fixed' || state.mode === 'compare' || state.mode === 'rank-compare') {
-                        const perfs = [], diffs = [], discs = [];
-                        activeBenchmarks.forEach(bId => {
-                            if (RAW_DATA.performances[id] && RAW_DATA.performances[id][bId] !== undefined) {
-                                perfs.push(RAW_DATA.performances[id][bId]);
-                                diffs.push(RAW_DATA.benchmarks[bId].diff);
-                                discs.push(RAW_DATA.benchmarks[bId].disc);
-                            }
-                        });
+                    // Filter by minBenchmarks
+                    if (perfs.length < state.minBenchmarks) return;
 
-                        if (perfs.length >= state.minBenchmarks) {
-                            fixedVal = solveFixed(perfs, diffs, discs);
-                        }
-                    }
+                    // Compute Fixed
+                    const fixedVal = solveFixed(perfs, diffs, discs);
 
-                    if (state.mode === 'refit' || state.mode === 'compare' || state.mode === 'rank-compare') {
-                        refitVal = refitScores[id];
-                    }
+                    // Get Refit (might be undefined if JMLE filtered it out, but shouldn't if logic matches)
+                    const refitVal = refitScores[modelId];
 
-                    const benchString = `"${employedBenchmarks.join('; ')}"`;
-
-                    // Construct Row
-                    if (state.mode === 'fixed') {
-                        if (fixedVal !== null) rows.push([`"${m.name}"`, m.date, fixedVal.toFixed(2), benchString]);
-                    } else if (state.mode === 'refit') {
-                        if (refitVal !== undefined) rows.push([`"${m.name}"`, m.date, refitVal.toFixed(2), benchString]);
-                    } else if (state.mode === 'compare') {
-                        if (fixedVal !== null && refitVal !== undefined) {
-                            rows.push([`"${m.name}"`, m.date, fixedVal.toFixed(2), refitVal.toFixed(2), benchString]);
-                        }
-                    } else if (state.mode === 'rank-compare') {
-                        // We need to re-compute ranks globally for export, but this function iterates per model.
-                        // Better approach: collect all valid pairs first, sort, rank, then export.
-                        // For simplicity in this patch, we skip complex re-ranking inside the export loop
-                        // or assume the user just wants the filtered data.
-                        // Actually, without sorting the whole set, we can't export ranks easily here efficiently without refactoring.
-                        // Let's just export the scores for now or do a quick re-calculation.
-                        // Since exportData is async, we can do it properly.
-                    }
+                    dataRows.push({
+                        id: modelId,
+                        name: m.name,
+                        date: m.date,
+                        fixed: fixedVal,
+                        refit: refitVal, // could be undefined
+                        count: perfs.length,
+                        benchmarks: modelBenchmarks.join('; ')
+                    });
                 });
 
-                if (state.mode === 'rank-compare') {
-                    // Post-process for Rank Compare Export
-                    // Gather all valid models
-                    const validModels = [];
-                     modelIds.forEach(id => {
-                        const m = RAW_DATA.models[id];
-                        let f = null;
-                        // ... (re-calc fixed) - wait, this is inefficient to duplicate code.
-                        // Given the architecture, let's just piggyback on what we have.
-                        // Let's restart the loop properly for Rank Compare.
-                     });
+                // 3. Compute Ranks
+                // Sort by Fixed Descending
+                dataRows.sort((a, b) => b.fixed - a.fixed);
+                dataRows.forEach((row, index) => row.fixedRank = index + 1);
 
-                     // Actually, let's just simplify and export the table data if possible?
-                     // But table data is not stored in state.
+                // Sort by Refit Descending (handle undefineds by pushing to bottom)
+                dataRows.sort((a, b) => {
+                    if (a.refit === undefined && b.refit === undefined) return 0;
+                    if (a.refit === undefined) return 1;
+                    if (b.refit === undefined) return -1;
+                    return b.refit - a.refit;
+                });
+                dataRows.forEach((row, index) => {
+                    if (row.refit !== undefined) row.refitRank = index + 1;
+                    else row.refitRank = '';
+                });
 
-                     // Re-implement simplified rank logic for export
-                     const data = [];
-                     modelIds.forEach(id => {
-                        // ... calc fixedVal and refitVal ...
-                        const perfs = [], diffs = [], discs = [];
-                        activeBenchmarks.forEach(bId => {
-                            if (RAW_DATA.performances[id] && RAW_DATA.performances[id][bId] !== undefined) {
-                                perfs.push(RAW_DATA.performances[id][bId]);
-                                diffs.push(RAW_DATA.benchmarks[bId].diff);
-                                discs.push(RAW_DATA.benchmarks[bId].disc);
-                            }
-                        });
-                        let f = null;
-                        if (perfs.length >= state.minBenchmarks) f = solveFixed(perfs, diffs, discs);
-                        let r = refitScores[id];
+                // 4. Construct CSV
+                // Sort by Fixed Rank (Capability) as default sort for export
+                dataRows.sort((a, b) => a.fixedRank - b.fixedRank);
 
-                        if (f !== null && r !== undefined) {
-                            data.push({ id, name: RAW_DATA.models[id].name, date: RAW_DATA.models[id].date, f, r,
-                                benches: activeBenchmarks.filter(b => RAW_DATA.performances[id][b] !== undefined).map(b => RAW_DATA.benchmarks[b].name).join('; ')
-                            });
-                        }
-                     });
+                const csvRows = [header.join(',')];
 
-                     data.sort((a,b) => b.f - a.f).forEach((d,i) => d.fRank = i+1);
-                     data.sort((a,b) => b.r - a.r).forEach((d,i) => d.rRank = i+1);
+                dataRows.forEach(d => {
+                    const row = [
+                        `"${d.name}"`,
+                        d.date,
+                        d.fixed.toFixed(2),
+                        d.refit !== undefined ? d.refit.toFixed(2) : '',
+                        d.fixedRank,
+                        d.refitRank,
+                        d.count,
+                        `"${d.benchmarks}"`
+                    ];
+                    csvRows.push(row.join(','));
+                });
 
-                     data.forEach(d => {
-                         rows.push([`"${d.name}"`, d.date, d.fRank, d.rRank, `"${d.benches}"`]);
-                     });
-                }
-
-                // Generate CSV
-                const csvContent = rows.map(r => r.join(",")).join("\n");
-
-                // Standard Download Method (Hidden Anchor)
-                // We use a Data URI here because Blob URLs on file:// protocol often ignore the 'download' attribute (filename).
-                // Browsers may still override the filename on local files depending on security settings, but this is the best standard approach.
+                const csvContent = csvRows.join("\n");
                 const BOM = "\uFEFF";
                 const uri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(BOM + csvContent);
 
                 const link = document.createElement("a");
                 link.setAttribute("href", uri);
-                link.setAttribute("download", `eci_export_${state.mode}.csv`);
+                link.setAttribute("download", `eci_export_full.csv`);
                 link.style.visibility = 'hidden';
                 document.body.appendChild(link);
                 link.click();
