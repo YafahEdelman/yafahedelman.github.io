@@ -613,7 +613,9 @@
                     type: (evolutionMode === 'relative' || evolutionMode === 'error') ? 'linear' : 'date',
                     zeroline: evolutionMode === 'error',
                     zerolinecolor: evolutionMode === 'error' ? '#999' : undefined,
-                    zerolinewidth: evolutionMode === 'error' ? 2 : undefined
+                    zerolinewidth: evolutionMode === 'error' ? 2 : undefined,
+                    scaleanchor: evolutionMode === 'relative' ? 'x' : undefined,
+                    scaleratio: evolutionMode === 'relative' ? 1 : undefined
                 },
                 showlegend: true,
                 legend: { x: 1.02, y: 1, xanchor: 'left' },
