@@ -518,18 +518,26 @@
 
                 let xValues, yValues, hoverTemplate;
 
+                const textLabels = validPoints.map(e => `${e.score}%`);
+
                 if (evolutionMode === 'relative' || evolutionMode === 'error') {
                     // X-axis: months until Y% was reached (negative to 0)
                     xValues = validPoints.map(e => {
                         const pointDate = new Date(e.date);
                         return (pointDate - actualDate) / (30.44 * 24 * 60 * 60 * 1000);
                     });
+                    // Add final point at x=0 (when Y% was reached)
+                    xValues.push(0);
+                    textLabels.push(`${targetPct}%`);
+
                     if (evolutionMode === 'error') {
                         // Y-axis: prediction error (predicted - actual) in months
                         yValues = validPoints.map(e => {
                             const predDate = new Date(e.predicted_date);
                             return (predDate - actualDate) / (30.44 * 24 * 60 * 60 * 1000);
                         });
+                        // At actual date, error is 0
+                        yValues.push(0);
                         hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Error: %{y:.1f} months<extra></extra>';
                     } else {
                         // Y-axis: predicted months from that point to Y%
@@ -538,11 +546,17 @@
                             const predDate = new Date(e.predicted_date);
                             return (predDate - pointDate) / (30.44 * 24 * 60 * 60 * 1000);
                         });
+                        // At actual date, 0 months to go
+                        yValues.push(0);
                         hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Predicted %{y:.1f} months to go<extra></extra>';
                     }
                 } else {
                     xValues = validPoints.map(e => new Date(e.date));
                     yValues = validPoints.map(e => new Date(e.predicted_date));
+                    // Add final point at actual date
+                    xValues.push(actualDate);
+                    yValues.push(actualDate);
+                    textLabels.push(`${targetPct}%`);
                     hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}: %{x}<br>Predicted ' + targetPct + '%: %{y}<extra></extra>';
                 }
 
@@ -556,7 +570,7 @@
                     legendgroup: b.benchmark,
                     line: { color: color, width: 2 },
                     marker: { size: 6, color: color },
-                    text: validPoints.map(e => `${e.score}%`),
+                    text: textLabels,
                     hovertemplate: hoverTemplate
                 });
 
