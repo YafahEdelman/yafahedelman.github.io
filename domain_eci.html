@@ -886,24 +886,70 @@
             return frontier;
         }
 
-        function bootstrapFrontier(allPoints, n_boot = 1000) {
+        async function bootstrapFrontier(activeBenchmarks, modelDataList, itemParams, scaling, minBenchmarks, n_boot = 1000) {
             const splitDates = [];
+            const N = activeBenchmarks.length;
+            const benchIds = activeBenchmarks;
+
+            // Pre-process: Create dense lookups for performance to avoid repeated dict access
+            // modelDataList = [{id, dateVal}]
+
+            // modelPerfs[mIdx][bIdx] = score or null
+            const modelPerfs = modelDataList.map(m => {
+                const pMap = RAW_DATA.performances[m.id];
+                if (!pMap) return benchIds.map(() => null);
+                return benchIds.map(bId => pMap[bId] !== undefined ? pMap[bId] : null);
+            });
+
+            // Pre-fetch item params
+            const cachedParams = benchIds.map(bId => itemParams[bId]);
 
             for (let b = 0; b < n_boot; b++) {
-                // Pairs Bootstrap: Resample full dataset
-                const sample = [];
-                for(let i=0; i<allPoints.length; i++) {
-                    sample.push(allPoints[Math.floor(Math.random() * allPoints.length)]);
+                // 1. Resample benchmarks (indices) with replacement
+                const sampleIndices = [];
+                for(let k=0; k<N; k++) {
+                    sampleIndices.push(Math.floor(Math.random() * N));
                 }
 
-                // Compute Frontier of Sample
-                const frontier = getFrontier(sample);
+                const samplePoints = [];
 
-                // Ensure enough points on frontier to fit
+                // 2. Rescore Models
+                for (let mIdx = 0; mIdx < modelDataList.length; mIdx++) {
+                    const perfs = [];
+                    const diffs = [];
+                    const discs = [];
+
+                    for (const sIdx of sampleIndices) {
+                         const val = modelPerfs[mIdx][sIdx];
+                         if (val !== null) {
+                             perfs.push(val);
+                             const params = cachedParams[sIdx];
+                             diffs.push(params.diff);
+                             discs.push(params.disc);
+                         }
+                    }
+
+                    if (perfs.length >= minBenchmarks) {
+                        // Calculate Theta
+                        let theta = solveFixed(perfs, diffs, discs);
+                        // Apply Scaling
+                        theta = scaling.a + scaling.b * theta;
+
+                        samplePoints.push({ x: modelDataList[mIdx].dateVal, y: theta });
+                    }
+                }
+
+                // 3. Compute Frontier
+                const frontier = getFrontier(samplePoints);
+
+                // 4. Breakpoint Regression
                 if (frontier.length >= 6) {
                     const res = breakpointRegression(frontier);
                     if (res) splitDates.push(res.splitX);
                 }
+
+                // Yield to UI thread occasionally
+                if (b % 50 === 0) await new Promise(r => setTimeout(r, 0));
             }
 
             if (splitDates.length === 0) return null;
@@ -1613,7 +1659,15 @@
                     const rawPoints = []; // {id, x (time), y, count, name}
                     const isFixed = state.mode === 'fixed';
 
+                    let activeItemParams = {};
+                    let activeScaling = { a: 0, b: 1 };
+
                     if (state.mode === 'fixed') {
+                        // Pre-load fixed params
+                        activeBenchmarks.forEach(bId => {
+                            activeItemParams[bId] = { diff: RAW_DATA.benchmarks[bId].diff, disc: RAW_DATA.benchmarks[bId].disc };
+                        });
+
                         Object.keys(RAW_DATA.models).forEach(modelId => {
                             const m = RAW_DATA.models[modelId];
                             if (!m.date) return;
@@ -1653,6 +1707,12 @@
                             const refitDiffs = refitResult.difficulty || {};
                             const refitDiscs = refitResult.discriminability || {};
                             const refitScaling = refitResult.scaling || { a: 0, b: 1 };
+
+                            // Capture for bootstrap
+                            activeScaling = refitScaling;
+                            activeBenchmarks.forEach(bId => {
+                                activeItemParams[bId] = { diff: refitDiffs[bId], disc: refitDiscs[bId] };
+                            });
 
                             Object.keys(refitScores).forEach(modelId => {
                                 const m = RAW_DATA.models[modelId];
@@ -1756,9 +1816,18 @@
 
                             let ciText = "";
                             let ci = null;
-                            // Bootstrap using FULL data (rawPoints)
-                            // We always calculate CI if we are showing breakpoint analysis, per user request
-                            ci = bootstrapFrontier(rawPoints, 1000);
+
+                            // Prepare data for benchmark-level bootstrapping (include ALL models with dates)
+                            const modelDataList = Object.keys(RAW_DATA.models)
+                                .map(id => {
+                                    const m = RAW_DATA.models[id];
+                                    if (!m || !m.date) return null;
+                                    return { id: id, dateVal: new Date(m.date).getTime() };
+                                })
+                                .filter(m => m !== null);
+
+                            // Bootstrap
+                            ci = await bootstrapFrontier(activeBenchmarks, modelDataList, activeItemParams, activeScaling, state.minBenchmarks, 1000);
 
                             if (ci) {
                                 const dLow = new Date(ci.low).toISOString().split('T')[0];
