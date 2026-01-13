@@ -886,15 +886,48 @@
             return frontier;
         }
 
-        function bootstrapFrontier(allPoints, n_boot = 1000) {
+        function bootstrapFrontier(activeBenchmarks, minBenchmarks, n_boot = 1000) {
             const splitDates = [];
+            const activeIds = Array.from(activeBenchmarks);
+            if (activeIds.length === 0) return null;
 
             for (let b = 0; b < n_boot; b++) {
-                // Pairs Bootstrap: Resample full dataset
-                const sample = [];
-                for(let i=0; i<allPoints.length; i++) {
-                    sample.push(allPoints[Math.floor(Math.random() * allPoints.length)]);
+                // Global Benchmark Resampling (Bootstrap Test Suite)
+                // 1. Resample the active benchmarks
+                const resampledBenchmarks = [];
+                for (let i = 0; i < activeIds.length; i++) {
+                    resampledBenchmarks.push(activeIds[Math.floor(Math.random() * activeIds.length)]);
                 }
+
+                // 2. Re-evaluate ALL models against this resampled set
+                const sample = [];
+                Object.keys(RAW_DATA.models).forEach(modelId => {
+                    const m = RAW_DATA.models[modelId];
+                    if (!m.date) return; // Skip models without date
+
+                    // Collect performance for resampled benchmarks
+                    const perfs = [];
+                    const diffs = [];
+                    const discs = [];
+
+                    resampledBenchmarks.forEach(bId => {
+                        if (RAW_DATA.performances[modelId] && RAW_DATA.performances[modelId][bId] !== undefined) {
+                            perfs.push(RAW_DATA.performances[modelId][bId]);
+                            diffs.push(RAW_DATA.benchmarks[bId].diff);
+                            discs.push(RAW_DATA.benchmarks[bId].disc);
+                        }
+                    });
+
+                    // 3. Dynamic Filtering
+                    if (perfs.length >= minBenchmarks) {
+                        const theta = solveFixed(perfs, diffs, discs);
+                        sample.push({
+                            id: modelId,
+                            x: new Date(m.date).getTime(),
+                            y: theta
+                        });
+                    }
+                });
 
                 // Compute Frontier of Sample
                 const frontier = getFrontier(sample);
@@ -1628,7 +1661,8 @@
                             if (perfs.length >= state.minBenchmarks) {
                                 const theta = solveFixed(perfs, diffs, discs);
                                 // Store x as numeric timestamp for collision logic
-                                const ci = state.showCI ? calculateBootstrapCI(perfs, diffs, discs) : { low: null, high: null };
+                                // Calculate CI if showing CI OR performing Breakpoint Analysis
+                                const ci = (state.showCI || state.showBreakpoint) ? calculateBootstrapCI(perfs, diffs, discs) : { low: null, high: null };
                                 // Store x as numeric timestamp for collision logic
                                 rawPoints.push({
                                     id: modelId,
@@ -1667,7 +1701,7 @@
                                         name: m.name
                                     });
 
-                                    if (state.showCI) {
+                                    if (state.showCI || state.showBreakpoint) {
                                         // Calc Refit CI
                                         const rPerfs = [], rDiffs = [], rDiscs = [];
                                         activeBenchmarks.forEach(bId => {
@@ -1756,9 +1790,11 @@
 
                             let ciText = "";
                             let ci = null;
-                            // Bootstrap using FULL data (rawPoints)
+                            // Bootstrap using Global Benchmark Resampling (Dynamic Filtering)
                             // We always calculate CI if we are showing breakpoint analysis, per user request
-                            ci = bootstrapFrontier(rawPoints, 1000);
+                            // Pass state.selectedBenchmarks and state.minBenchmarks instead of rawPoints
+                            // Reduce n_boot to 100 for responsiveness since we do re-fitting inside
+                            ci = bootstrapFrontier(state.selectedBenchmarks, state.minBenchmarks, 100);
 
                             if (ci) {
                                 const dLow = new Date(ci.low).toISOString().split('T')[0];
