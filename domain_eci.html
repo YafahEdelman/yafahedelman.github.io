@@ -886,20 +886,42 @@
             return frontier;
         }
 
-        function bootstrapFrontier(allPoints, n_boot = 1000) {
+        async function bootstrapFrontier(modelDataList, minBenchmarks, scaling, n_boot = 1000) {
             const splitDates = [];
 
             for (let b = 0; b < n_boot; b++) {
-                // Pairs Bootstrap: Resample full dataset
-                const sample = [];
-                for(let i=0; i<allPoints.length; i++) {
-                    sample.push(allPoints[Math.floor(Math.random() * allPoints.length)]);
+                const samplePoints = [];
+
+                for (const m of modelDataList) {
+                    const k = m.perfs.length;
+                    if (k === 0) continue;
+
+                    const res_perfs = [];
+                    const res_diffs = [];
+                    const res_discs = [];
+                    const uniqueIndices = new Set();
+
+                    for (let i = 0; i < k; i++) {
+                        const idx = Math.floor(Math.random() * k);
+                        res_perfs.push(m.perfs[idx]);
+                        res_diffs.push(m.diffs[idx]);
+                        res_discs.push(m.discs[idx]);
+                        uniqueIndices.add(idx);
+                    }
+
+                    if (uniqueIndices.size >= minBenchmarks) {
+                        let theta = solveFixed(res_perfs, res_diffs, res_discs);
+                        if (scaling) {
+                            theta = scaling.a + scaling.b * theta;
+                        }
+                        samplePoints.push({ x: m.x, y: theta });
+                    }
                 }
 
-                // Compute Frontier of Sample
-                const frontier = getFrontier(sample);
+                if (b % 20 === 0) await new Promise(r => setTimeout(r, 0));
 
-                // Ensure enough points on frontier to fit
+                const frontier = getFrontier(samplePoints);
+
                 if (frontier.length >= 6) {
                     const res = breakpointRegression(frontier);
                     if (res) splitDates.push(res.splitX);
@@ -1269,6 +1291,7 @@
             }
 
             try {
+                let currentItemParams = { diffs: {}, discs: {}, scaling: { a: 0, b: 1 } };
                 const plotData = [];
                 const isMobile = window.innerWidth < 1024;
                 let layout = {
@@ -1614,6 +1637,13 @@
                     const isFixed = state.mode === 'fixed';
 
                     if (state.mode === 'fixed') {
+                        activeBenchmarks.forEach(bId => {
+                            if (RAW_DATA.benchmarks[bId]) {
+                                currentItemParams.diffs[bId] = RAW_DATA.benchmarks[bId].diff;
+                                currentItemParams.discs[bId] = RAW_DATA.benchmarks[bId].disc;
+                            }
+                        });
+
                         Object.keys(RAW_DATA.models).forEach(modelId => {
                             const m = RAW_DATA.models[modelId];
                             if (!m.date) return;
@@ -1649,6 +1679,11 @@
                         await new Promise(r => setTimeout(r, 50));
                         try {
                             const refitResult = await solveJMLE(state.selectedBenchmarks, state.minBenchmarks);
+
+                            currentItemParams.diffs = refitResult.difficulty || {};
+                            currentItemParams.discs = refitResult.discriminability || {};
+                            currentItemParams.scaling = refitResult.scaling || { a: 0, b: 1 };
+
                             const refitScores = refitResult.ability || {};
                             const refitDiffs = refitResult.difficulty || {};
                             const refitDiscs = refitResult.discriminability || {};
@@ -1756,9 +1791,26 @@
 
                             let ciText = "";
                             let ci = null;
-                            // Bootstrap using FULL data (rawPoints)
-                            // We always calculate CI if we are showing breakpoint analysis, per user request
-                            ci = bootstrapFrontier(rawPoints, 1000);
+
+                            // Prepare data for bootstrap
+                            const modelDataList = rawPoints.map(p => {
+                                const mId = p.id;
+                                const perfs = [], diffs = [], discs = [];
+
+                                activeBenchmarks.forEach(bId => {
+                                    if (RAW_DATA.performances[mId] && RAW_DATA.performances[mId][bId] !== undefined) {
+                                        if (currentItemParams.diffs[bId] !== undefined && currentItemParams.discs[bId] !== undefined) {
+                                            perfs.push(RAW_DATA.performances[mId][bId]);
+                                            diffs.push(currentItemParams.diffs[bId]);
+                                            discs.push(currentItemParams.discs[bId]);
+                                        }
+                                    }
+                                });
+                                return { x: p.x, perfs, diffs, discs };
+                            });
+
+                            // Bootstrap
+                            ci = await bootstrapFrontier(modelDataList, state.minBenchmarks, currentItemParams.scaling, 1000);
 
                             if (ci) {
                                 const dLow = new Date(ci.low).toISOString().split('T')[0];
