@@ -504,7 +504,8 @@
             const colors = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#f39c12', '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#7f8c8d'];
 
             benchmarks.forEach((b, idx) => {
-                if (!b.evolution || b.evolution.length === 0) return;
+                // Only show benchmarks that have reached Y%
+                if (!b.actual_date || !b.evolution || b.evolution.length === 0) return;
 
                 const color = colors[idx % colors.length];
                 const validPoints = b.evolution.filter(e => e.predicted_date);
