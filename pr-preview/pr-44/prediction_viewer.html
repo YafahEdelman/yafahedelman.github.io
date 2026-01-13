@@ -174,9 +174,10 @@
         <h2 style="margin-top: 0;">Prediction Evolution Over Time</h2>
         <p style="color: #666; margin-top: 0;">How predictions changed as each benchmark progressed. Dotted lines show actual Y% date.</p>
         <div style="margin-bottom: 10px;">
-            <label style="font-weight: 600; color: #444; margin-right: 10px;">X-axis:</label>
+            <label style="font-weight: 600; color: #444; margin-right: 10px;">View:</label>
             <button class="toggle-btn active" id="absoluteBtn" onclick="setEvolutionMode('absolute')">Absolute dates</button>
             <button class="toggle-btn" id="relativeBtn" onclick="setEvolutionMode('relative')">Months to Y%</button>
+            <button class="toggle-btn" id="errorBtn" onclick="setEvolutionMode('error')">Months to Y% err</button>
         </div>
         <div id="evolutionChart"></div>
     </div>
@@ -201,6 +202,7 @@
             evolutionMode = mode;
             document.getElementById('absoluteBtn').classList.toggle('active', mode === 'absolute');
             document.getElementById('relativeBtn').classList.toggle('active', mode === 'relative');
+            document.getElementById('errorBtn').classList.toggle('active', mode === 'error');
             updateChart();
         }
 
@@ -516,19 +518,28 @@
 
                 let xValues, yValues, hoverTemplate;
 
-                if (evolutionMode === 'relative') {
+                if (evolutionMode === 'relative' || evolutionMode === 'error') {
                     // X-axis: months until Y% was reached (negative to 0)
                     xValues = validPoints.map(e => {
                         const pointDate = new Date(e.date);
                         return (pointDate - actualDate) / (30.44 * 24 * 60 * 60 * 1000);
                     });
-                    // Y-axis: predicted months from that point to Y%
-                    yValues = validPoints.map(e => {
-                        const pointDate = new Date(e.date);
-                        const predDate = new Date(e.predicted_date);
-                        return (predDate - pointDate) / (30.44 * 24 * 60 * 60 * 1000);
-                    });
-                    hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Predicted %{y:.1f} months to go<extra></extra>';
+                    if (evolutionMode === 'error') {
+                        // Y-axis: prediction error (predicted - actual) in months
+                        yValues = validPoints.map(e => {
+                            const predDate = new Date(e.predicted_date);
+                            return (predDate - actualDate) / (30.44 * 24 * 60 * 60 * 1000);
+                        });
+                        hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Error: %{y:.1f} months<extra></extra>';
+                    } else {
+                        // Y-axis: predicted months from that point to Y%
+                        yValues = validPoints.map(e => {
+                            const pointDate = new Date(e.date);
+                            const predDate = new Date(e.predicted_date);
+                            return (predDate - pointDate) / (30.44 * 24 * 60 * 60 * 1000);
+                        });
+                        hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Predicted %{y:.1f} months to go<extra></extra>';
+                    }
                 } else {
                     xValues = validPoints.map(e => new Date(e.date));
                     yValues = validPoints.map(e => new Date(e.predicted_date));
@@ -549,8 +560,8 @@
                     hovertemplate: hoverTemplate
                 });
 
-                // Horizontal line for actual date (y=0 in relative mode)
-                if (evolutionMode === 'relative') {
+                // Horizontal line for actual date (y=0 in relative/error mode)
+                if (evolutionMode === 'relative' || evolutionMode === 'error') {
                     const xMin = Math.min(...xValues);
                     evolutionTraces.push({
                         x: [xMin, 0],
@@ -578,14 +589,17 @@
 
             const evolutionLayout = {
                 xaxis: {
-                    title: evolutionMode === 'relative' ? `Months until ${targetPct}% was reached` : 'Date prediction was made',
+                    title: (evolutionMode === 'relative' || evolutionMode === 'error') ? `Months until ${targetPct}% was reached` : 'Date prediction was made',
                     gridcolor: '#eee',
-                    type: evolutionMode === 'relative' ? 'linear' : 'date'
+                    type: (evolutionMode === 'relative' || evolutionMode === 'error') ? 'linear' : 'date'
                 },
                 yaxis: {
-                    title: evolutionMode === 'relative' ? `Predicted months to reach ${targetPct}%` : `Predicted date to reach ${targetPct}%`,
+                    title: evolutionMode === 'error' ? `Prediction error (months)` : (evolutionMode === 'relative' ? `Predicted months to reach ${targetPct}%` : `Predicted date to reach ${targetPct}%`),
                     gridcolor: '#eee',
-                    type: evolutionMode === 'relative' ? 'linear' : 'date'
+                    type: (evolutionMode === 'relative' || evolutionMode === 'error') ? 'linear' : 'date',
+                    zeroline: evolutionMode === 'error',
+                    zerolinecolor: evolutionMode === 'error' ? '#999' : undefined,
+                    zerolinewidth: evolutionMode === 'error' ? 2 : undefined
                 },
                 showlegend: true,
                 legend: { x: 1.02, y: 1, xanchor: 'left' },
