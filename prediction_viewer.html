@@ -511,7 +511,7 @@
                     hovertemplate: '<b>' + b.benchmark + '</b><br>At %{text}: %{x}<br>Predicted ' + targetPct + '%: %{y}<extra></extra>'
                 });
 
-                // Diamond marker for start threshold
+                // Small marker for start threshold
                 const startThresholdPoint = validPoints.find(e => e.is_start_threshold);
                 if (startThresholdPoint) {
                     evolutionTraces.push({
@@ -519,7 +519,7 @@
                         y: [new Date(startThresholdPoint.predicted_date)],
                         mode: 'markers',
                         type: 'scatter',
-                        marker: { size: 14, color: color, symbol: 'diamond', line: { width: 2, color: '#222' } },
+                        marker: { size: 8, color: color, symbol: 'diamond-open', line: { width: 1.5 } },
                         showlegend: false,
                         hovertemplate: '<b>' + b.benchmark + '</b><br>Hit ' + startPct + '% threshold<br>Predicted ' + targetPct + '%: %{y}<extra></extra>'
                     });
