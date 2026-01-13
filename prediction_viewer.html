@@ -106,6 +106,13 @@
 
     <div class="controls">
         <div class="control-group">
+            <label>Prediction start:</label>
+            <div class="toggle-group">
+                <button class="toggle-btn active" id="pctModeBtn" onclick="setStartMode('pct')">By percentage</button>
+                <button class="toggle-btn" id="recordModeBtn" onclick="setStartMode('record')">By record #</button>
+            </div>
+        </div>
+        <div class="control-group" id="startPctGroup">
             <label for="startPct">Prediction made at:</label>
             <select id="startPct">
                 <option value="10">10%</option>
@@ -116,6 +123,21 @@
                 <option value="60">60%</option>
                 <option value="70">70%</option>
                 <option value="80">80%</option>
+            </select>
+        </div>
+        <div class="control-group" id="startRecordGroup" style="display: none;">
+            <label for="startRecord">Prediction made at record #:</label>
+            <select id="startRecord">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
             </select>
         </div>
         <div class="control-group">
@@ -193,11 +215,21 @@
 
         let axisMode = 'months';
         let evolutionMode = 'absolute';
+        let startMode = 'pct';
 
         function setAxisMode(mode) {
             axisMode = mode;
             document.getElementById('monthsBtn').classList.toggle('active', mode === 'months');
             document.getElementById('datesBtn').classList.toggle('active', mode === 'dates');
+            updateChart();
+        }
+
+        function setStartMode(mode) {
+            startMode = mode;
+            document.getElementById('pctModeBtn').classList.toggle('active', mode === 'pct');
+            document.getElementById('recordModeBtn').classList.toggle('active', mode === 'record');
+            document.getElementById('startPctGroup').style.display = mode === 'pct' ? '' : 'none';
+            document.getElementById('startRecordGroup').style.display = mode === 'record' ? '' : 'none';
             updateChart();
         }
 
@@ -214,9 +246,10 @@
 
         function updateChart() {
             const startPct = document.getElementById('startPct').value;
+            const startRecord = parseInt(document.getElementById('startRecord').value);
             const targetPct = document.getElementById('targetPct').value;
 
-            if (parseInt(startPct) >= parseInt(targetPct)) {
+            if (startMode === 'pct' && parseInt(startPct) >= parseInt(targetPct)) {
                 document.getElementById('chart').innerHTML = '<div class="no-data">Start percentage must be less than target percentage</div>';
                 document.getElementById('timeline').innerHTML = '';
                 document.getElementById('pctErrorChart').innerHTML = '';
@@ -226,20 +259,74 @@
                 return;
             }
 
-            const key = `${startPct}_${targetPct}`;
-            const data = predictionData[key];
+            let benchmarks, startLabel;
 
-            if (!data || !data.benchmarks || data.benchmarks.length === 0) {
-                document.getElementById('chart').innerHTML = '<div class="no-data">No benchmarks have reached this target yet</div>';
-                document.getElementById('timeline').innerHTML = '';
-                document.getElementById('pctErrorChart').innerHTML = '';
-                document.getElementById('evolutionChart').innerHTML = '';
-                document.getElementById('stats').innerHTML = '';
-                document.getElementById('pctErrorStats').innerHTML = '';
-                return;
+            if (startMode === 'pct') {
+                const key = `${startPct}_${targetPct}`;
+                const data = predictionData[key];
+                if (!data || !data.benchmarks || data.benchmarks.length === 0) {
+                    document.getElementById('chart').innerHTML = '<div class="no-data">No benchmarks have reached this target yet</div>';
+                    document.getElementById('timeline').innerHTML = '';
+                    document.getElementById('pctErrorChart').innerHTML = '';
+                    document.getElementById('evolutionChart').innerHTML = '';
+                    document.getElementById('stats').innerHTML = '';
+                    document.getElementById('pctErrorStats').innerHTML = '';
+                    return;
+                }
+                benchmarks = data.benchmarks;
+                startLabel = `${startPct}%`;
+            } else {
+                // Record mode: extract predictions from evolution data at specific record number
+                // Use 10% -> targetPct as base to get most benchmarks with evolution data
+                const baseKey = `10_${targetPct}`;
+                const baseData = predictionData[baseKey];
+                if (!baseData || !baseData.benchmarks) {
+                    document.getElementById('chart').innerHTML = '<div class="no-data">No data available</div>';
+                    document.getElementById('timeline').innerHTML = '';
+                    document.getElementById('pctErrorChart').innerHTML = '';
+                    document.getElementById('evolutionChart').innerHTML = '';
+                    document.getElementById('stats').innerHTML = '';
+                    document.getElementById('pctErrorStats').innerHTML = '';
+                    return;
+                }
+
+                benchmarks = [];
+                baseData.benchmarks.forEach(b => {
+                    if (!b.evolution || b.evolution.length < startRecord || !b.actual_date) return;
+
+                    const recordPoint = b.evolution[startRecord - 1];
+                    if (!recordPoint || !recordPoint.predicted_date) return;
+
+                    const cutoffDate = new Date(recordPoint.date);
+                    const actualDate = new Date(b.actual_date);
+                    const predictedDate = new Date(recordPoint.predicted_date);
+
+                    const actualMonths = (actualDate - cutoffDate) / (30.44 * 24 * 60 * 60 * 1000);
+                    const predictedMonths = (predictedDate - cutoffDate) / (30.44 * 24 * 60 * 60 * 1000);
+
+                    benchmarks.push({
+                        benchmark: b.benchmark,
+                        predicted_months: predictedMonths,
+                        actual_months: actualMonths,
+                        cutoff_date: recordPoint.date,
+                        actual_date: b.actual_date,
+                        cutoff_score: recordPoint.score,
+                        evolution: b.evolution.slice(startRecord - 1)
+                    });
+                });
+
+                if (benchmarks.length === 0) {
+                    document.getElementById('chart').innerHTML = '<div class="no-data">No benchmarks have enough records</div>';
+                    document.getElementById('timeline').innerHTML = '';
+                    document.getElementById('pctErrorChart').innerHTML = '';
+                    document.getElementById('evolutionChart').innerHTML = '';
+                    document.getElementById('stats').innerHTML = '';
+                    document.getElementById('pctErrorStats').innerHTML = '';
+                    return;
+                }
+                startLabel = `record #${startRecord}`;
             }
 
-            const benchmarks = data.benchmarks;
             const names = benchmarks.map(b => b.benchmark);
             const labelsWithScore = benchmarks.map(b => `${b.benchmark} (${b.cutoff_score}%)`);
 
@@ -253,8 +340,8 @@
             if (axisMode === 'months') {
                 xValues = benchmarks.map(b => b.predicted_months);
                 yValues = benchmarks.map(b => b.actual_months);
-                xTitle = `Predicted months to reach ${targetPct}% (from ${startPct}%)`;
-                yTitle = `Actual months to reach ${targetPct}% (from ${startPct}%)`;
+                xTitle = `Predicted months to reach ${targetPct}% (from ${startLabel})`;
+                yTitle = `Actual months to reach ${targetPct}% (from ${startLabel})`;
             } else {
                 xValues = benchmarks.map(b => {
                     const cutoff = new Date(b.cutoff_date);
@@ -303,7 +390,7 @@
             const scatterLayout = {
                 title: {
                     text: axisMode === 'months'
-                        ? `Predicted vs Actual Months from ${startPct}% to ${targetPct}%`
+                        ? `Predicted vs Actual Months from ${startLabel} to ${targetPct}%`
                         : `Predicted vs Actual Date to Reach ${targetPct}%`,
                     font: { size: 18 }
                 },
@@ -740,6 +827,7 @@
         }
 
         document.getElementById('startPct').addEventListener('change', updateChart);
+        document.getElementById('startRecord').addEventListener('change', updateChart);
         document.getElementById('targetPct').addEventListener('change', updateChart);
         updateChart();
     </script>
