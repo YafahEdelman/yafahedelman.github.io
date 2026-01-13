@@ -172,7 +172,7 @@
 
     <div class="chart-container">
         <h2 style="margin-top: 0;">Prediction Evolution Over Time</h2>
-        <p style="color: #666; margin-top: 0;">How predictions changed as each benchmark progressed. Diamonds mark X% threshold.</p>
+        <p style="color: #666; margin-top: 0;">How predictions changed as each benchmark progressed. Dotted lines show actual Y% date.</p>
         <div id="evolutionChart"></div>
     </div>
 
@@ -505,25 +505,12 @@
                     mode: 'lines+markers',
                     type: 'scatter',
                     name: b.benchmark,
+                    legendgroup: b.benchmark,
                     line: { color: color, width: 2 },
                     marker: { size: 6, color: color },
                     text: validPoints.map(e => `${e.score}%`),
                     hovertemplate: '<b>' + b.benchmark + '</b><br>At %{text}: %{x}<br>Predicted ' + targetPct + '%: %{y}<extra></extra>'
                 });
-
-                // Small marker for start threshold
-                const startThresholdPoint = validPoints.find(e => e.is_start_threshold);
-                if (startThresholdPoint) {
-                    evolutionTraces.push({
-                        x: [new Date(startThresholdPoint.date)],
-                        y: [new Date(startThresholdPoint.predicted_date)],
-                        mode: 'markers',
-                        type: 'scatter',
-                        marker: { size: 8, color: color, symbol: 'diamond-open', line: { width: 1.5 } },
-                        showlegend: false,
-                        hovertemplate: '<b>' + b.benchmark + '</b><br>Hit ' + startPct + '% threshold<br>Predicted ' + targetPct + '%: %{y}<extra></extra>'
-                    });
-                }
 
                 // Horizontal line for actual date
                 const actualDate = new Date(b.actual_date);
@@ -532,6 +519,7 @@
                     y: [actualDate, actualDate],
                     mode: 'lines',
                     type: 'scatter',
+                    legendgroup: b.benchmark,
                     line: { color: color, width: 1, dash: 'dot' },
                     showlegend: false,
                     hoverinfo: 'skip'
