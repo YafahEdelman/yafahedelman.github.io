@@ -178,6 +178,7 @@
             <button class="toggle-btn active" id="absoluteBtn" onclick="setEvolutionMode('absolute')">Absolute dates</button>
             <button class="toggle-btn" id="relativeBtn" onclick="setEvolutionMode('relative')">Months to Y%</button>
             <button class="toggle-btn" id="errorBtn" onclick="setEvolutionMode('error')">Months to Y% err</button>
+            <button class="toggle-btn" id="errorPctBtn" onclick="setEvolutionMode('errorPct')">Months to Y% err %</button>
         </div>
         <div id="evolutionChart"></div>
     </div>
@@ -203,6 +204,7 @@
             document.getElementById('absoluteBtn').classList.toggle('active', mode === 'absolute');
             document.getElementById('relativeBtn').classList.toggle('active', mode === 'relative');
             document.getElementById('errorBtn').classList.toggle('active', mode === 'error');
+            document.getElementById('errorPctBtn').classList.toggle('active', mode === 'errorPct');
             updateChart();
         }
 
@@ -520,7 +522,7 @@
 
                 const textLabels = validPoints.map(e => `${e.score}%`);
 
-                if (evolutionMode === 'relative' || evolutionMode === 'error') {
+                if (evolutionMode === 'relative' || evolutionMode === 'error' || evolutionMode === 'errorPct') {
                     // X-axis: months until Y% was reached (negative to 0)
                     xValues = validPoints.map(e => {
                         const pointDate = new Date(e.date);
@@ -539,6 +541,19 @@
                         // At actual date, error is 0
                         yValues.push(0);
                         hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Error: %{y:.1f} months<extra></extra>';
+                    } else if (evolutionMode === 'errorPct') {
+                        // Y-axis: prediction error as percentage of actual time remaining
+                        yValues = validPoints.map(e => {
+                            const pointDate = new Date(e.date);
+                            const predDate = new Date(e.predicted_date);
+                            const actualTimeRemaining = (actualDate - pointDate) / (30.44 * 24 * 60 * 60 * 1000);
+                            const predictedTimeRemaining = (predDate - pointDate) / (30.44 * 24 * 60 * 60 * 1000);
+                            if (actualTimeRemaining === 0) return 0;
+                            return ((predictedTimeRemaining - actualTimeRemaining) / actualTimeRemaining) * 100;
+                        });
+                        // At actual date, error is 0%
+                        yValues.push(0);
+                        hoverTemplate = '<b>' + b.benchmark + '</b><br>At %{text}<br>%{x:.1f} months before ' + targetPct + '%<br>Error: %{y:.1f}%<extra></extra>';
                     } else {
                         // Y-axis: predicted months from that point to Y%
                         yValues = validPoints.map(e => {
@@ -574,8 +589,8 @@
                     hovertemplate: hoverTemplate
                 });
 
-                // Horizontal line for actual date (y=0 in relative/error mode)
-                if (evolutionMode === 'relative' || evolutionMode === 'error') {
+                // Horizontal line for actual date (y=0 in relative/error/errorPct mode)
+                if (evolutionMode === 'relative' || evolutionMode === 'error' || evolutionMode === 'errorPct') {
                     const xMin = Math.min(...xValues);
                     evolutionTraces.push({
                         x: [xMin, 0],
@@ -601,19 +616,24 @@
                 }
             });
 
+            const isRelativeX = (evolutionMode === 'relative' || evolutionMode === 'error' || evolutionMode === 'errorPct');
+            const yAxisTitle = evolutionMode === 'errorPct' ? `Prediction error (%)` :
+                               (evolutionMode === 'error' ? `Prediction error (months)` :
+                               (evolutionMode === 'relative' ? `Predicted months to reach ${targetPct}%` : `Predicted date to reach ${targetPct}%`));
+
             const evolutionLayout = {
                 xaxis: {
-                    title: (evolutionMode === 'relative' || evolutionMode === 'error') ? `Months until ${targetPct}% was reached` : 'Date prediction was made',
+                    title: isRelativeX ? `Months until ${targetPct}% was reached` : 'Date prediction was made',
                     gridcolor: '#eee',
-                    type: (evolutionMode === 'relative' || evolutionMode === 'error') ? 'linear' : 'date'
+                    type: isRelativeX ? 'linear' : 'date'
                 },
                 yaxis: {
-                    title: evolutionMode === 'error' ? `Prediction error (months)` : (evolutionMode === 'relative' ? `Predicted months to reach ${targetPct}%` : `Predicted date to reach ${targetPct}%`),
+                    title: yAxisTitle,
                     gridcolor: '#eee',
-                    type: (evolutionMode === 'relative' || evolutionMode === 'error') ? 'linear' : 'date',
-                    zeroline: evolutionMode === 'error',
-                    zerolinecolor: evolutionMode === 'error' ? '#999' : undefined,
-                    zerolinewidth: evolutionMode === 'error' ? 2 : undefined,
+                    type: isRelativeX ? 'linear' : 'date',
+                    zeroline: evolutionMode === 'error' || evolutionMode === 'errorPct',
+                    zerolinecolor: (evolutionMode === 'error' || evolutionMode === 'errorPct') ? '#999' : undefined,
+                    zerolinewidth: (evolutionMode === 'error' || evolutionMode === 'errorPct') ? 2 : undefined,
                     scaleanchor: evolutionMode === 'relative' ? 'x' : undefined,
                     scaleratio: evolutionMode === 'relative' ? 1 : undefined
                 },
