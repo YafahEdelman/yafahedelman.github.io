@@ -517,17 +517,14 @@
         mouthGroup.add(mouthCurve2);
         headGroup.add(mouthGroup);
 
-        // Whiskers
-        const whiskerMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+        // Whiskers - using thin cylinders for visibility
+        const whiskerMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
         const whiskers = [];
 
         function createWhisker(x, y, z, angleY, angleZ) {
-            const points = [
-                new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(0, 0, 0.4)
-            ];
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            const whisker = new THREE.Line(geometry, whiskerMat);
+            const whiskerGeo = new THREE.CylinderGeometry(0.008, 0.004, 0.5, 4);
+            whiskerGeo.rotateX(Math.PI / 2);
+            const whisker = new THREE.Mesh(whiskerGeo, whiskerMat);
             whisker.position.set(x, y, z);
             whisker.rotation.y = angleY;
             whisker.rotation.z = angleZ;
@@ -537,14 +534,14 @@
         }
 
         // Left whiskers
-        createWhisker(0.25, -0.08, 0.45, 0.3, 0.1);
-        createWhisker(0.25, -0.12, 0.45, 0.3, 0);
-        createWhisker(0.25, -0.16, 0.45, 0.3, -0.1);
+        createWhisker(0.22, -0.06, 0.5, 0.4, 0.15);
+        createWhisker(0.22, -0.10, 0.5, 0.35, 0);
+        createWhisker(0.22, -0.14, 0.5, 0.4, -0.15);
 
         // Right whiskers
-        createWhisker(-0.25, -0.08, 0.45, -0.3, -0.1);
-        createWhisker(-0.25, -0.12, 0.45, -0.3, 0);
-        createWhisker(-0.25, -0.16, 0.45, -0.3, 0.1);
+        createWhisker(-0.22, -0.06, 0.5, -0.4, -0.15);
+        createWhisker(-0.22, -0.10, 0.5, -0.35, 0);
+        createWhisker(-0.22, -0.14, 0.5, -0.4, 0.15);
 
         // Forehead stripes (tabby M pattern hint)
         const foreheadStripe = new THREE.Mesh(
@@ -555,47 +552,70 @@
         foreheadStripe.rotation.x = -0.5;
         headGroup.add(foreheadStripe);
 
-        // Legs with paw pads
+        // Articulated legs with joints
         const legs = [];
-        const legGeo = new THREE.CylinderGeometry(0.14, 0.12, 0.9, 12);
-        const pawGeo = new THREE.SphereGeometry(0.14, 12, 12);
-        const pawPadGeo = new THREE.SphereGeometry(0.06, 8, 8);
+        const upperLegGeo = new THREE.CylinderGeometry(0.12, 0.10, 0.45, 10);
+        const lowerLegGeo = new THREE.CylinderGeometry(0.10, 0.08, 0.45, 10);
+        const pawGeo = new THREE.SphereGeometry(0.12, 12, 12);
+        const pawPadGeo = new THREE.SphereGeometry(0.05, 8, 8);
 
         function createLeg(x, z, name) {
-            const legGroup = new THREE.Group();
-            legGroup.position.set(x, 0.9, z);
+            // Hip joint (attaches to body)
+            const hipJoint = new THREE.Group();
+            hipJoint.position.set(x, 1.0, z);
 
-            const legMesh = new THREE.Mesh(legGeo, materialFur);
-            legMesh.position.y = -0.45;
-            legMesh.castShadow = true;
-            legGroup.add(legMesh);
+            // Upper leg
+            const upperLeg = new THREE.Mesh(upperLegGeo, materialFur);
+            upperLeg.position.y = -0.22;
+            upperLeg.castShadow = true;
+            hipJoint.add(upperLeg);
+
+            // Knee joint
+            const kneeJoint = new THREE.Group();
+            kneeJoint.position.y = -0.45;
+            hipJoint.add(kneeJoint);
+
+            // Lower leg
+            const lowerLeg = new THREE.Mesh(lowerLegGeo, materialFur);
+            lowerLeg.position.y = -0.22;
+            lowerLeg.castShadow = true;
+            kneeJoint.add(lowerLeg);
+
+            // Ankle/Paw joint
+            const ankleJoint = new THREE.Group();
+            ankleJoint.position.y = -0.45;
+            kneeJoint.add(ankleJoint);
 
             // Paw
             const paw = new THREE.Mesh(pawGeo, materialFur);
-            paw.position.y = -0.9;
-            paw.scale.set(1.1, 0.6, 1.2);
+            paw.scale.set(1.1, 0.5, 1.3);
             paw.castShadow = true;
-            legGroup.add(paw);
+            ankleJoint.add(paw);
 
             // Paw pads
             const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
-            mainPad.position.set(0, -0.92, 0.08);
-            mainPad.scale.set(1.5, 0.5, 1.2);
-            legGroup.add(mainPad);
+            mainPad.position.set(0, -0.03, 0.06);
+            mainPad.scale.set(1.4, 0.4, 1.0);
+            ankleJoint.add(mainPad);
 
             // Toe beans
             for (let i = 0; i < 3; i++) {
                 const toePad = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.03, 8, 8),
+                    new THREE.SphereGeometry(0.025, 6, 6),
                     materialPawPad
                 );
-                toePad.position.set(-0.06 + i * 0.06, -0.92, 0.15);
-                legGroup.add(toePad);
+                toePad.position.set(-0.05 + i * 0.05, -0.03, 0.12);
+                ankleJoint.add(toePad);
             }
 
-            kittenGroup.add(legGroup);
-            legs.push({ mesh: legGroup, name: name });
-            return legGroup;
+            kittenGroup.add(hipJoint);
+            legs.push({
+                mesh: hipJoint,
+                knee: kneeJoint,
+                ankle: ankleJoint,
+                name: name
+            });
+            return hipJoint;
         }
 
         const legFL = createLeg(0.35, 0.55, 'FL');
@@ -862,6 +882,44 @@
         laserDot.visible = false;
         scene.add(laserDot);
 
+        // Special draggable yarn ball
+        const yarnGroup = new THREE.Group();
+        // Create yarn texture with wrapped lines
+        const yarnBallGeo = new THREE.SphereGeometry(0.35, 16, 16);
+        const yarnMat = new THREE.MeshStandardMaterial({ color: 0xff6699, roughness: 0.9 });
+        const mainYarn = new THREE.Mesh(yarnBallGeo, yarnMat);
+        mainYarn.castShadow = true;
+        yarnGroup.add(mainYarn);
+        // Add yarn strand wraps
+        for (let i = 0; i < 8; i++) {
+            const wrap = new THREE.Mesh(
+                new THREE.TorusGeometry(0.35, 0.03, 4, 16),
+                new THREE.MeshStandardMaterial({ color: 0xff4477 })
+            );
+            wrap.rotation.x = Math.random() * Math.PI;
+            wrap.rotation.y = Math.random() * Math.PI;
+            yarnGroup.add(wrap);
+        }
+        // Trailing yarn strand
+        const strandCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0, 0.35),
+            new THREE.Vector3(0.3, 0, 0.6),
+            new THREE.Vector3(0.2, 0, 1.0),
+            new THREE.Vector3(0.5, 0, 1.3)
+        ]);
+        const strandGeo = new THREE.TubeGeometry(strandCurve, 12, 0.02, 6, false);
+        const strand = new THREE.Mesh(strandGeo, new THREE.MeshStandardMaterial({ color: 0xff4477 }));
+        yarnGroup.add(strand);
+        yarnGroup.position.set(0, 0.35, 4);
+        scene.add(yarnGroup);
+
+        const specialYarn = { mesh: yarnGroup, type: 'yarn', radius: 0.35, velocity: new THREE.Vector3(), attractive: true, draggable: true };
+        toys.push(specialYarn);
+
+        // Dragging state
+        let draggedToy = null;
+        let dragOffset = new THREE.Vector3();
+
         // Treat
         function spawnTreat(x, z) {
             const treat = new THREE.Mesh(
@@ -894,11 +952,22 @@
         let stateTimer = 0;
         let targetPos = new THREE.Vector3();
         let targetToy = null;
+        let currentGoal = null; // What the kitten is trying to do
         const walkSpeed = 2.0;
         const runSpeed = 4.5;
         const turnSpeed = 4.0;
         let currentSpeed = walkSpeed;
         let pawPrintTimer = 0;
+
+        // Important locations
+        const locations = {
+            bed: new THREE.Vector3(-5, 0, -3),
+            food: new THREE.Vector3(-7, 0, 4),
+            water: new THREE.Vector3(-5.8, 0, 4),
+            scratchPost: new THREE.Vector3(6, 0, -4),
+            sunbeam: new THREE.Vector3(5, 0, 2),
+            center: new THREE.Vector3(0, 0, 0)
+        };
 
         const stateEmojis = {
             'IDLE': '😺 Idle',
@@ -910,12 +979,16 @@
             'GROOM': '🧼 Grooming',
             'STRETCH': '🙆 Stretching',
             'EAT': '🍽️ Eating',
+            'DRINK': '💧 Drinking',
             'MEOW': '😺 Meowing',
-            'LASER': '🔴 Chasing Laser'
+            'LASER': '🔴 Chasing Laser',
+            'SCRATCH': '🐾 Scratching',
+            'SUNBATHE': '☀️ Sunbathing'
         };
 
-        function setState(newState) {
+        function setState(newState, goal = null) {
             state = newState;
+            currentGoal = goal;
             document.getElementById('state-indicator').textContent = stateEmojis[newState] || newState;
         }
 
@@ -925,7 +998,7 @@
             return new THREE.Vector3(r * Math.cos(theta), 0, r * Math.sin(theta));
         }
 
-        function findNearestToy() {
+        function findNearestToy(maxDist = 15) {
             let nearest = null;
             let nearestDist = Infinity;
             const kittenPos = kittenGroup.position;
@@ -933,12 +1006,128 @@
             for (const toy of toys) {
                 if (!toy.attractive) continue;
                 const dist = kittenPos.distanceTo(toy.mesh.position);
-                if (dist < nearestDist && dist < 8) {
+                if (dist < nearestDist && dist < maxDist) {
                     nearestDist = dist;
                     nearest = toy;
                 }
             }
             return nearest;
+        }
+
+        function findInterestingToy() {
+            // Prefer moving toys or nearby toys
+            let best = null;
+            let bestScore = -Infinity;
+            const kittenPos = kittenGroup.position;
+
+            for (const toy of toys) {
+                if (!toy.attractive) continue;
+                const dist = kittenPos.distanceTo(toy.mesh.position);
+                const speed = toy.velocity.length();
+                // Score: closer is better, moving toys are more interesting
+                const score = (20 - dist) + speed * 10 + (toy.type === 'mouse' ? 5 : 0);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = toy;
+                }
+            }
+            return best;
+        }
+
+        function decideNextAction() {
+            // Kitten AI decision making based on needs and environment
+            const rand = Math.random();
+
+            // Urgent needs first
+            if (stats.energy < 20) {
+                // Very tired - go to bed
+                setState('WALK', 'bed');
+                targetPos.copy(locations.bed);
+                stateTimer = 15;
+                return;
+            }
+
+            if (stats.hunger < 25) {
+                // Hungry - go eat
+                setState('WALK', 'food');
+                targetPos.copy(locations.food);
+                stateTimer = 15;
+                return;
+            }
+
+            // Check for interesting toys
+            const interestingToy = findInterestingToy();
+
+            // Moderate needs
+            if (stats.energy < 50 && rand < 0.4) {
+                // Tired - might rest in sunbeam or bed
+                if (rand < 0.2) {
+                    setState('WALK', 'sunbeam');
+                    targetPos.copy(locations.sunbeam);
+                } else {
+                    setState('WALK', 'bed');
+                    targetPos.copy(locations.bed);
+                }
+                stateTimer = 10;
+                return;
+            }
+
+            if (stats.hunger < 50 && rand < 0.25) {
+                setState('WALK', 'food');
+                targetPos.copy(locations.food);
+                stateTimer = 10;
+                return;
+            }
+
+            // Fun activities based on energy level
+            if (stats.energy > 60) {
+                // Energetic - play with toys!
+                if (interestingToy && rand < 0.6) {
+                    targetToy = interestingToy;
+                    setState('HUNT', 'toy');
+                    stateTimer = 8;
+                    return;
+                }
+
+                if (rand < 0.15) {
+                    setState('WALK', 'scratch');
+                    targetPos.copy(locations.scratchPost);
+                    stateTimer = 8;
+                    return;
+                }
+            }
+
+            // Random behaviors
+            if (rand < 0.15) {
+                setState('GROOM');
+                stateTimer = 3 + Math.random() * 2;
+            } else if (rand < 0.25) {
+                setState('STRETCH');
+                stateTimer = 2;
+            } else if (rand < 0.32) {
+                setState('MEOW');
+                stateTimer = 1.5;
+                showMeow();
+            } else if (rand < 0.5 && interestingToy) {
+                targetToy = interestingToy;
+                setState('HUNT', 'toy');
+                stateTimer = 8;
+            } else if (rand < 0.7) {
+                // Wander to a specific location
+                const locs = ['sunbeam', 'center', 'scratchPost'];
+                const choice = locs[Math.floor(Math.random() * locs.length)];
+                setState('WALK', choice);
+                targetPos.copy(locations[choice]);
+                // Add some randomness around the target
+                targetPos.x += (Math.random() - 0.5) * 2;
+                targetPos.z += (Math.random() - 0.5) * 2;
+                stateTimer = 8;
+            } else {
+                // Random exploration
+                setState('WALK', 'explore');
+                targetPos = pickRandomPoint(8);
+                stateTimer = 5;
+            }
         }
 
         // --- TOOL STATE ---
@@ -977,13 +1166,36 @@
         }
 
         function onPointerDown(event) {
-            if (event.target.closest('#tools-panel') || event.target.closest('#stats-panel')) return;
+            if (event.target.closest('#tools-panel') || event.target.closest('#stats-panel') || event.target.closest('#instructions')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            // First check if clicking on a toy to drag it
+            const toyMeshes = toys.map(t => t.mesh);
+            const toyIntersects = raycaster.intersectObjects(toyMeshes, true);
+            if (toyIntersects.length > 0) {
+                // Find which toy was clicked
+                let clickedMesh = toyIntersects[0].object;
+                while (clickedMesh.parent && !toyMeshes.includes(clickedMesh)) {
+                    clickedMesh = clickedMesh.parent;
+                }
+                const clickedToy = toys.find(t => t.mesh === clickedMesh || t.mesh.children.includes(toyIntersects[0].object) || clickedMesh.parent === t.mesh);
+                if (clickedToy) {
+                    draggedToy = clickedToy;
+                    draggedToy.velocity.set(0, 0, 0);
+                    // Kitten notices!
+                    if (state === 'IDLE' || state === 'WALK') {
+                        targetToy = draggedToy;
+                        setState('HUNT', 'toy');
+                        stateTimer = 10;
+                    }
+                    return;
+                }
+            }
 
             if (currentTool === 'pet') {
-                raycaster.setFromCamera(mouse, camera);
                 const intersects = raycaster.intersectObjects(kittenGroup.children, true);
                 if (intersects.length > 0) {
                     setState('PET');
@@ -991,6 +1203,9 @@
                     for (let i = 0; i < 5; i++) spawnHeart();
                     stats.happiness = Math.min(100, stats.happiness + 10);
                     updateStatsUI();
+                } else {
+                    // Camera drag
+                    isDragging = true;
                 }
             } else if (currentTool === 'laser') {
                 laserActive = true;
@@ -1009,21 +1224,24 @@
                 if (pos) {
                     spawnTreat(pos.x, pos.z);
                     if (state === 'IDLE' || state === 'WALK') {
-                        setState('WALK');
+                        setState('WALK', 'food');
                         targetPos.copy(pos);
+                        stateTimer = 10;
                     }
                 }
             } else if (currentTool === 'yarn') {
+                // Teleport the yarn ball to mouse position
                 const pos = getFloorIntersection(event);
                 if (pos) {
-                    const yarnBall = new THREE.Mesh(
-                        new THREE.SphereGeometry(0.25, 12, 12),
-                        new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff })
-                    );
-                    yarnBall.castShadow = true;
-                    yarnBall.position.set(pos.x, 0.25, pos.z);
-                    scene.add(yarnBall);
-                    toys.push({ mesh: yarnBall, type: 'ball', radius: 0.25, velocity: new THREE.Vector3(), attractive: true });
+                    specialYarn.mesh.position.set(pos.x, 0.35, pos.z);
+                    specialYarn.velocity.set(0, 0, 0);
+                    draggedToy = specialYarn;
+                    // Kitten notices the yarn!
+                    if (state !== 'SLEEP' && state !== 'PET') {
+                        targetToy = specialYarn;
+                        setState('HUNT', 'toy');
+                        stateTimer = 10;
+                    }
                 }
             } else if (currentTool === 'catnip') {
                 const pos = getFloorIntersection(event);
@@ -1048,13 +1266,34 @@
                 }
             }
 
-            isDragging = true;
             previousMousePosition = { x: event.clientX, y: event.clientY };
         }
 
         function onPointerMove(event) {
+            const pos = getFloorIntersection(event);
+
+            // Handle toy dragging first
+            if (draggedToy && pos) {
+                const oldPos = draggedToy.mesh.position.clone();
+                draggedToy.mesh.position.set(
+                    THREE.MathUtils.clamp(pos.x, -12, 12),
+                    draggedToy.type === 'yarn' ? 0.35 : draggedToy.radius,
+                    THREE.MathUtils.clamp(pos.z, -12, 12)
+                );
+                // Calculate velocity for when released
+                draggedToy.velocity.set(
+                    (draggedToy.mesh.position.x - oldPos.x) * 20,
+                    0,
+                    (draggedToy.mesh.position.z - oldPos.z) * 20
+                );
+                // Keep kitten interested
+                if (targetToy === draggedToy && (state === 'HUNT' || state === 'PLAY')) {
+                    stateTimer = Math.max(stateTimer, 3);
+                }
+                return;
+            }
+
             if (currentTool === 'laser' && laserActive) {
-                const pos = getFloorIntersection(event);
                 if (pos) {
                     laserDot.position.set(
                         THREE.MathUtils.clamp(pos.x, -12, 12),
@@ -1063,7 +1302,7 @@
                     );
                     targetPos.copy(laserDot.position);
                 }
-            } else if (isDragging && currentTool === 'pet') {
+            } else if (isDragging) {
                 const deltaX = event.clientX - previousMousePosition.x;
                 cameraAngle += deltaX * 0.01;
                 previousMousePosition = { x: event.clientX, y: event.clientY };
@@ -1071,6 +1310,12 @@
         }
 
         function onPointerUp() {
+            // Release dragged toy with momentum
+            if (draggedToy) {
+                // Toy keeps its velocity from dragging
+                draggedToy = null;
+            }
+
             isDragging = false;
             if (currentTool === 'laser') {
                 laserActive = false;
@@ -1138,7 +1383,7 @@
 
                 // Whisker twitch
                 whiskers.forEach((w, i) => {
-                    w.rotation.z = Math.sin(time * 3 + i) * 0.05;
+                    w.rotation.z += Math.sin(time * 3 + i) * 0.002;
                 });
 
                 // Return to standing pose
@@ -1148,50 +1393,26 @@
                 leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 1, 5 * dt);
                 rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 1, 5 * dt);
 
-                // Reset legs
+                // Reset legs to standing pose
                 legs.forEach(leg => {
                     leg.mesh.rotation.x = THREE.MathUtils.lerp(leg.mesh.rotation.x, 0, 5 * dt);
+                    leg.mesh.rotation.z = THREE.MathUtils.lerp(leg.mesh.rotation.z, 0, 5 * dt);
+                    leg.knee.rotation.x = THREE.MathUtils.lerp(leg.knee.rotation.x, 0, 5 * dt);
+                    leg.ankle.rotation.x = THREE.MathUtils.lerp(leg.ankle.rotation.x, 0, 5 * dt);
                 });
 
+                // Look at interesting things
+                const nearToy = findNearestToy(5);
+                if (nearToy) {
+                    const toyDir = nearToy.mesh.position.clone().sub(kittenGroup.position);
+                    const lookAngle = Math.atan2(toyDir.x, toyDir.z);
+                    headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, (lookAngle - kittenGroup.rotation.y) * 0.3, 3 * dt);
+                } else {
+                    headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, 0, 2 * dt);
+                }
+
                 if (stateTimer <= 0) {
-                    const rand = Math.random();
-                    if (stats.energy < 30 || rand < 0.15) {
-                        setState('SLEEP');
-                        stateTimer = 8 + Math.random() * 7;
-                    } else if (stats.hunger < 30) {
-                        // Go to food bowl
-                        setState('WALK');
-                        targetPos.set(-7, 0, 4);
-                        stateTimer = 10;
-                    } else if (rand < 0.35) {
-                        setState('WALK');
-                        targetPos = pickRandomPoint();
-                        stateTimer = 5 + Math.random() * 3;
-                    } else if (rand < 0.5) {
-                        setState('GROOM');
-                        stateTimer = 3 + Math.random() * 2;
-                    } else if (rand < 0.65) {
-                        setState('STRETCH');
-                        stateTimer = 2;
-                    } else if (rand < 0.75) {
-                        setState('MEOW');
-                        stateTimer = 1.5;
-                        showMeow();
-                    } else if (rand < 0.9) {
-                        targetToy = findNearestToy();
-                        if (targetToy) {
-                            setState('HUNT');
-                            stateTimer = 6;
-                        } else {
-                            setState('WALK');
-                            targetPos = pickRandomPoint();
-                            stateTimer = 4;
-                        }
-                    } else {
-                        setState('PLAY');
-                        stateTimer = 4 + Math.random() * 3;
-                        targetToy = findNearestToy();
-                    }
+                    decideNextAction();
                 }
             }
             else if (state === 'SLEEP') {
@@ -1238,10 +1459,31 @@
                 direction.y = 0;
                 const dist = direction.length();
 
-                if (dist < 0.3) {
-                    setState('IDLE');
-                    stateTimer = 1 + Math.random() * 2;
+                // Check if we've arrived at our goal
+                const arrivalDist = state === 'LASER' ? 0.3 : 0.8;
+                if (dist < arrivalDist) {
                     currentSpeed = walkSpeed;
+
+                    // Do something based on what we came here for
+                    if (currentGoal === 'bed') {
+                        setState('SLEEP');
+                        stateTimer = 6 + Math.random() * 6;
+                    } else if (currentGoal === 'food') {
+                        setState('EAT');
+                        stateTimer = 3;
+                    } else if (currentGoal === 'water') {
+                        setState('DRINK');
+                        stateTimer = 2;
+                    } else if (currentGoal === 'sunbeam') {
+                        setState('SUNBATHE');
+                        stateTimer = 5 + Math.random() * 5;
+                    } else if (currentGoal === 'scratch') {
+                        setState('SCRATCH');
+                        stateTimer = 3 + Math.random() * 2;
+                    } else {
+                        setState('IDLE');
+                        stateTimer = 0.5 + Math.random() * 1.5;
+                    }
                 } else {
                     direction.normalize();
 
@@ -1256,13 +1498,23 @@
                     const speed = state === 'LASER' ? runSpeed : currentSpeed;
                     kittenGroup.position.add(direction.multiplyScalar(speed * dt));
 
-                    // Walk animation
+                    // Walk animation with articulated legs
                     const legAmp = state === 'LASER' ? 0.5 : 0.35;
+                    const kneeAmp = state === 'LASER' ? 0.6 : 0.4;
                     const legFreq = state === 'LASER' ? 15 : 10;
-                    legs[0].mesh.rotation.x = Math.sin(time * legFreq) * legAmp;
-                    legs[1].mesh.rotation.x = Math.cos(time * legFreq) * legAmp;
-                    legs[2].mesh.rotation.x = Math.cos(time * legFreq) * legAmp;
-                    legs[3].mesh.rotation.x = Math.sin(time * legFreq) * legAmp;
+
+                    // Front left, back right swing together
+                    const phase1 = Math.sin(time * legFreq);
+                    const phase2 = Math.cos(time * legFreq);
+
+                    legs[0].mesh.rotation.x = phase1 * legAmp;
+                    legs[0].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
+                    legs[1].mesh.rotation.x = phase2 * legAmp;
+                    legs[1].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
+                    legs[2].mesh.rotation.x = phase2 * legAmp;
+                    legs[2].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
+                    legs[3].mesh.rotation.x = phase1 * legAmp;
+                    legs[3].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
 
                     // Head bob
                     headGroup.position.y = 1.9 + Math.sin(time * legFreq * 2) * 0.04;
@@ -1281,6 +1533,17 @@
                             kittenGroup.position.z,
                             kittenGroup.rotation.y
                         );
+                    }
+
+                    // Check for distractions - nearby moving toys!
+                    if (state !== 'LASER' && currentGoal !== 'food' && currentGoal !== 'bed') {
+                        const movingToy = toys.find(t => t.velocity.length() > 1 &&
+                            kittenGroup.position.distanceTo(t.mesh.position) < 4);
+                        if (movingToy && Math.random() < 0.03) {
+                            targetToy = movingToy;
+                            setState('HUNT', 'toy');
+                            stateTimer = 5;
+                        }
                     }
 
                     stateTimer -= dt;
@@ -1318,12 +1581,19 @@
                 stateTimer -= dt;
 
                 // Sit pose
-                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.2, 3 * dt);
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
 
-                // Lift paw to face
-                const groomLeg = legs[0].mesh;
-                groomLeg.rotation.x = THREE.MathUtils.lerp(groomLeg.rotation.x, -1.2, 5 * dt);
-                groomLeg.rotation.z = THREE.MathUtils.lerp(groomLeg.rotation.z, 0.3, 5 * dt);
+                // Bend back legs for sitting
+                legs[2].mesh.rotation.x = THREE.MathUtils.lerp(legs[2].mesh.rotation.x, -0.8, 3 * dt);
+                legs[2].knee.rotation.x = THREE.MathUtils.lerp(legs[2].knee.rotation.x, 1.2, 3 * dt);
+                legs[3].mesh.rotation.x = THREE.MathUtils.lerp(legs[3].mesh.rotation.x, -0.8, 3 * dt);
+                legs[3].knee.rotation.x = THREE.MathUtils.lerp(legs[3].knee.rotation.x, 1.2, 3 * dt);
+
+                // Lift front paw to face with bending
+                const groomLeg = legs[0];
+                groomLeg.mesh.rotation.x = THREE.MathUtils.lerp(groomLeg.mesh.rotation.x, -1.0, 5 * dt);
+                groomLeg.mesh.rotation.z = THREE.MathUtils.lerp(groomLeg.mesh.rotation.z, 0.3, 5 * dt);
+                groomLeg.knee.rotation.x = THREE.MathUtils.lerp(groomLeg.knee.rotation.x, 0.8, 5 * dt);
 
                 // Head licking motion
                 headGroup.rotation.z = Math.sin(time * 8) * 0.1;
@@ -1332,7 +1602,6 @@
                 if (stateTimer <= 0) {
                     setState('IDLE');
                     stateTimer = 1;
-                    groomLeg.rotation.z = 0;
                     headGroup.rotation.z = 0;
                     headGroup.position.z = 1.1;
                     stats.happiness = Math.min(100, stats.happiness + 5);
@@ -1345,17 +1614,32 @@
                 const progress = 1 - (stateTimer / 2);
 
                 if (progress < 0.5) {
-                    // Front stretch
-                    legs[0].mesh.rotation.x = -0.8 * (progress * 2);
-                    legs[1].mesh.rotation.x = -0.8 * (progress * 2);
-                    kittenGroup.position.y = -0.2 * (progress * 2);
-                    bodyGroup.scale.z = 1 + 0.2 * (progress * 2);
+                    // Front stretch - extend front legs forward
+                    const p = progress * 2;
+                    legs[0].mesh.rotation.x = -0.6 * p;
+                    legs[0].knee.rotation.x = -0.3 * p;
+                    legs[1].mesh.rotation.x = -0.6 * p;
+                    legs[1].knee.rotation.x = -0.3 * p;
+                    // Back legs stay planted, bend more
+                    legs[2].mesh.rotation.x = 0.2 * p;
+                    legs[2].knee.rotation.x = 0.4 * p;
+                    legs[3].mesh.rotation.x = 0.2 * p;
+                    legs[3].knee.rotation.x = 0.4 * p;
+                    kittenGroup.position.y = -0.2 * p;
+                    bodyGroup.scale.z = 1 + 0.15 * p;
                 } else {
-                    // Back arch
-                    legs[0].mesh.rotation.x = -0.8 + 0.8 * ((progress - 0.5) * 2);
-                    legs[1].mesh.rotation.x = -0.8 + 0.8 * ((progress - 0.5) * 2);
-                    kittenGroup.position.y = -0.2 + 0.2 * ((progress - 0.5) * 2);
-                    bodyGroup.scale.z = 1.2 - 0.2 * ((progress - 0.5) * 2);
+                    // Back arch - pull front legs in
+                    const p = (progress - 0.5) * 2;
+                    legs[0].mesh.rotation.x = -0.6 + 0.6 * p;
+                    legs[0].knee.rotation.x = -0.3 + 0.3 * p;
+                    legs[1].mesh.rotation.x = -0.6 + 0.6 * p;
+                    legs[1].knee.rotation.x = -0.3 + 0.3 * p;
+                    legs[2].mesh.rotation.x = 0.2 - 0.2 * p;
+                    legs[2].knee.rotation.x = 0.4 - 0.4 * p;
+                    legs[3].mesh.rotation.x = 0.2 - 0.2 * p;
+                    legs[3].knee.rotation.x = 0.4 - 0.4 * p;
+                    kittenGroup.position.y = -0.2 + 0.2 * p;
+                    bodyGroup.scale.z = 1.15 - 0.15 * p;
                 }
 
                 // Yawn
@@ -1405,14 +1689,46 @@
                     const direction = toyPos.sub(currentPos);
                     const dist = direction.length();
 
-                    if (dist < 0.8) {
+                    // Dynamic hunt speed based on distance and toy movement
+                    const toyMoving = targetToy.velocity.length() > 0.5;
+                    const huntSpeed = toyMoving ? 3.5 : (dist > 3 ? 2.5 : 1.2);
+
+                    if (dist < 0.7) {
                         // Pounce!
                         setState('PLAY');
                         stateTimer = 2;
-                        targetToy.velocity.add(direction.normalize().multiplyScalar(8));
+                        const pounceDir = direction.normalize();
+                        targetToy.velocity.add(pounceDir.multiplyScalar(6));
                         stats.happiness = Math.min(100, stats.happiness + 10);
                         updateStatsUI();
+                        // Spawn some excitement particles
+                        for (let i = 0; i < 3; i++) spawnHeart();
+                    } else if (dist > 2 && toyMoving) {
+                        // Chase mode - run after moving toy!
+                        direction.normalize();
+
+                        const targetRotation = Math.atan2(direction.x, direction.z);
+                        let rotDiff = targetRotation - kittenGroup.rotation.y;
+                        while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                        while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                        kittenGroup.rotation.y += rotDiff * turnSpeed * 1.5 * dt;
+
+                        kittenGroup.position.add(direction.multiplyScalar(huntSpeed * dt));
+                        kittenGroup.position.y = Math.abs(Math.sin(time * 12) * 0.08);
+
+                        // Running leg animation with articulated joints
+                        legs.forEach((leg, i) => {
+                            const phase = Math.sin(time * 15 + i * Math.PI/2);
+                            leg.mesh.rotation.x = phase * 0.5;
+                            leg.knee.rotation.x = Math.max(0, -phase) * 0.7;
+                        });
+
+                        // Excited tail
+                        tailSegments.forEach((seg, i) => {
+                            seg.rotation.z = Math.sin(time * 10 + i) * 0.35;
+                        });
                     } else {
+                        // Stalk mode - slow creep
                         direction.normalize();
 
                         // Crouch and stalk
@@ -1426,10 +1742,12 @@
                         kittenGroup.rotation.y += rotDiff * turnSpeed * dt;
 
                         // Slow creep
-                        kittenGroup.position.add(direction.multiplyScalar(1.0 * dt));
+                        kittenGroup.position.add(direction.multiplyScalar(huntSpeed * dt));
 
-                        // Wiggle butt
-                        kittenGroup.rotation.z = Math.sin(time * 15) * 0.05;
+                        // Wiggle butt before pounce
+                        if (dist < 2) {
+                            kittenGroup.rotation.z = Math.sin(time * 20) * 0.08;
+                        }
 
                         // Focused ears
                         leftEar.rotation.z = -0.1;
@@ -1438,8 +1756,15 @@
                         // Tail low and twitching
                         tailSegments.forEach((seg, i) => {
                             seg.rotation.x = 0.3;
-                            seg.rotation.z = Math.sin(time * 20 + i) * 0.1;
+                            seg.rotation.z = Math.sin(time * 20 + i) * 0.15;
                         });
+                    }
+                } else {
+                    // Lost target, find new one
+                    targetToy = findInterestingToy();
+                    if (!targetToy) {
+                        setState('IDLE');
+                        stateTimer = 1;
                     }
                 }
 
@@ -1470,9 +1795,11 @@
                     kittenGroup.rotation.y = THREE.MathUtils.lerp(kittenGroup.rotation.y, targetRotation, 8 * dt);
                 }
 
-                // Fast leg movement
+                // Fast leg movement with knee articulation
                 legs.forEach((leg, i) => {
-                    leg.mesh.rotation.x = Math.sin(time * 18 + i * Math.PI / 2) * 0.6;
+                    const phase = Math.sin(time * 18 + i * Math.PI / 2);
+                    leg.mesh.rotation.x = phase * 0.6;
+                    leg.knee.rotation.x = Math.max(0, -phase) * 0.8;
                 });
 
                 // Excited tail
@@ -1501,6 +1828,84 @@
                     stateTimer = 2;
                     headGroup.rotation.x = 0;
                     stats.hunger = Math.min(100, stats.hunger + 30);
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'DRINK') {
+                stateTimer -= dt;
+
+                // Head down, lapping motion
+                headGroup.position.y = 1.4 + Math.sin(time * 12) * 0.03;
+                headGroup.rotation.x = 0.5;
+
+                // Tongue lapping (mouth opens slightly)
+                mouthGroup.scale.y = 1 + Math.abs(Math.sin(time * 12)) * 0.3;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    headGroup.rotation.x = 0;
+                    mouthGroup.scale.y = 1;
+                    stats.happiness = Math.min(100, stats.happiness + 5);
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'SUNBATHE') {
+                stateTimer -= dt;
+
+                // Relaxed lying pose
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.4, 2 * dt);
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0.3, 2 * dt);
+
+                // Squinty happy eyes
+                leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 0.3, 5 * dt);
+                rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 0.3, 5 * dt);
+
+                // Slow content breathing
+                bodyGroup.scale.set(1, 1 + Math.sin(time * 1.5) * 0.03, 1);
+
+                // Relaxed tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.05, 2 * dt);
+                });
+
+                // Recover energy and happiness
+                stats.energy = Math.min(100, stats.energy + dt * 2);
+                stats.happiness = Math.min(100, stats.happiness + dt * 1);
+
+                if (stateTimer <= 0) {
+                    setState('STRETCH');
+                    stateTimer = 2;
+                }
+            }
+            else if (state === 'SCRATCH') {
+                stateTimer -= dt;
+
+                // Stand up against post
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0.2, 5 * dt);
+
+                // Alternate front paws scratching with articulation
+                const scratch1 = Math.sin(time * 10);
+                const scratch2 = Math.cos(time * 10);
+
+                legs[0].mesh.rotation.x = -0.7 + scratch1 * 0.35;
+                legs[0].mesh.rotation.z = 0.2;
+                legs[0].knee.rotation.x = 0.3 + Math.abs(scratch1) * 0.2;
+
+                legs[1].mesh.rotation.x = -0.7 + scratch2 * 0.35;
+                legs[1].mesh.rotation.z = -0.2;
+                legs[1].knee.rotation.x = 0.3 + Math.abs(scratch2) * 0.2;
+
+                // Happy tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 6 + i * 0.5) * 0.3;
+                });
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 3);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
                     updateStatsUI();
                 }
             }
