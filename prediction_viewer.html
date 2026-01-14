@@ -296,7 +296,7 @@
                 }
                 benchmarks = data.benchmarks;
                 startLabel = `${startPct}%`;
-            } else {
+            } else if (startMode === 'record') {
                 // Record mode: extract predictions from evolution data at specific record number
                 // Use 10% -> targetPct as base to get most benchmarks with evolution data
                 const baseKey = `10_${targetPct}`;
