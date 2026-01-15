@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D Kitten Simulator - AI Designed Tiny Games</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { touch-action: none; display: block; }
         #ui-layer {
             position: absolute;
             top: 10px;
@@ -96,6 +97,107 @@
             z-index: 10;
             max-width: 200px;
         }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            #ui-layer h1 {
+                font-size: 1rem;
+                padding: 6px 12px;
+            }
+            #ui-layer .mt-2 a {
+                font-size: 0.7rem;
+                padding: 4px 8px;
+            }
+            #stats-panel {
+                top: auto;
+                bottom: 90px;
+                left: 5px;
+                padding: 8px 10px;
+                min-width: 120px;
+                font-size: 10px;
+            }
+            #stats-panel > div:first-child {
+                font-size: 12px !important;
+                margin-bottom: 5px !important;
+            }
+            .stat-bar {
+                height: 8px;
+                margin: 2px 0 6px 0;
+            }
+            #state-indicator {
+                top: 5px;
+                right: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            #tools-panel {
+                bottom: 10px;
+                gap: 6px;
+            }
+            .tool-btn {
+                width: 46px;
+                height: 46px;
+                font-size: 18px;
+                border-width: 2px;
+            }
+            #instructions {
+                display: none;
+            }
+        }
+
+        /* Extra small phones */
+        @media (max-width: 400px) {
+            #ui-layer h1 {
+                font-size: 0.85rem;
+                padding: 4px 10px;
+            }
+            #stats-panel {
+                min-width: 100px;
+                padding: 6px 8px;
+            }
+            .tool-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+        }
+
+        /* Landscape mode on mobile */
+        @media (max-height: 500px) {
+            #ui-layer {
+                top: 5px;
+            }
+            #ui-layer h1 {
+                font-size: 0.9rem;
+                padding: 4px 10px;
+            }
+            #ui-layer .mt-2 {
+                margin-top: 2px !important;
+            }
+            #stats-panel {
+                top: 5px;
+                bottom: auto;
+                left: 5px;
+                padding: 6px 8px;
+                min-width: 100px;
+            }
+            #state-indicator {
+                top: 5px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+            #tools-panel {
+                bottom: 5px;
+            }
+            .tool-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            #instructions {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -149,7 +251,8 @@
         camera.position.set(0, 8, 14);
         camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -243,6 +346,117 @@
         windowFrame.position.set(-14.8, 5, 0);
         windowFrame.rotation.y = Math.PI / 2;
         scene.add(windowFrame);
+
+        // Sky background visible through window
+        const skyPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(6, 5),
+            new THREE.MeshBasicMaterial({
+                color: 0x87ceeb,
+                side: THREE.DoubleSide
+            })
+        );
+        skyPlane.position.set(-15.5, 5, 0);
+        skyPlane.rotation.y = Math.PI / 2;
+        scene.add(skyPlane);
+
+        // Clouds outside window
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+        const clouds = [];
+        for (let i = 0; i < 3; i++) {
+            const cloudGroup = new THREE.Group();
+            for (let j = 0; j < 4; j++) {
+                const puff = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3 + Math.random() * 0.2, 8, 8),
+                    cloudMat
+                );
+                puff.position.set(j * 0.3, Math.random() * 0.2, Math.random() * 0.2);
+                cloudGroup.add(puff);
+            }
+            cloudGroup.position.set(-15.8, 6 + i * 0.8, -2 + i * 2);
+            cloudGroup.rotation.y = Math.PI / 2;
+            scene.add(cloudGroup);
+            clouds.push({ mesh: cloudGroup, speed: 0.1 + Math.random() * 0.1 });
+        }
+
+        // Birds outside window (silhouettes that fly by)
+        const birds = [];
+        const birdMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+
+        function createBird() {
+            const birdGroup = new THREE.Group();
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 8, 8),
+                birdMat
+            );
+            body.scale.set(1, 0.7, 1.5);
+            birdGroup.add(body);
+
+            // Wings
+            const wingGeo = new THREE.PlaneGeometry(0.25, 0.1);
+            const leftWing = new THREE.Mesh(wingGeo, birdMat);
+            leftWing.position.set(0.12, 0.02, 0);
+            leftWing.rotation.z = 0.3;
+            birdGroup.add(leftWing);
+
+            const rightWing = new THREE.Mesh(wingGeo, birdMat);
+            rightWing.position.set(-0.12, 0.02, 0);
+            rightWing.rotation.z = -0.3;
+            birdGroup.add(rightWing);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.04, 6, 6),
+                birdMat
+            );
+            head.position.set(0, 0.02, 0.1);
+            birdGroup.add(head);
+
+            birdGroup.position.set(-15.6, 5.5 + Math.random() * 1.5, 5);
+            birdGroup.rotation.y = Math.PI / 2;
+            scene.add(birdGroup);
+
+            return {
+                mesh: birdGroup,
+                leftWing: leftWing,
+                rightWing: rightWing,
+                speed: 1.5 + Math.random(),
+                flapSpeed: 8 + Math.random() * 4,
+                startZ: 5
+            };
+        }
+
+        // Spawn initial birds
+        for (let i = 0; i < 2; i++) {
+            birds.push(createBird());
+            birds[i].mesh.position.z = -3 + i * 3;
+        }
+
+        // Dust motes floating in sunbeam
+        const dustMotes = [];
+        const dustMat = new THREE.MeshBasicMaterial({ color: 0xffffee, transparent: true, opacity: 0.6 });
+
+        for (let i = 0; i < 30; i++) {
+            const dust = new THREE.Mesh(
+                new THREE.SphereGeometry(0.02 + Math.random() * 0.02, 4, 4),
+                dustMat
+            );
+            dust.position.set(
+                5 + (Math.random() - 0.5) * 3,
+                1 + Math.random() * 4,
+                2 + (Math.random() - 0.5) * 3
+            );
+            scene.add(dust);
+            dustMotes.push({
+                mesh: dust,
+                baseY: dust.position.y,
+                driftX: Math.random() * 2 - 1,
+                driftZ: Math.random() * 2 - 1,
+                phase: Math.random() * Math.PI * 2,
+                speed: 0.2 + Math.random() * 0.3
+            });
+        }
 
         // Cat Bed
         const catBedGroup = new THREE.Group();
@@ -350,179 +564,311 @@
         scene.add(rug);
 
         // --- KITTEN MODEL ---
+        // Adorable kitten with big head, big eyes, fluffy features
         const kittenGroup = new THREE.Group();
         scene.add(kittenGroup);
 
-        // Materials
-        const furColor = 0xffaa55; // Orange tabby
-        const stripeColor = 0xcc7733;
-        const materialFur = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.85 });
-        const materialStripe = new THREE.MeshStandardMaterial({ color: stripeColor, roughness: 0.85 });
-        const materialWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
-        const materialPink = new THREE.MeshStandardMaterial({ color: 0xffb6c1, roughness: 0.6 });
-        const materialEyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
-        const materialPupil = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.1 });
+        // Materials with softer, cuter colors
+        const furColor = 0xffb366; // Warm orange tabby
+        const stripeColor = 0xdd8844;
+        const bellyColor = 0xfff5ee; // Cream white
+        const materialFur = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
+        const materialStripe = new THREE.MeshStandardMaterial({ color: stripeColor, roughness: 0.95 });
+        const materialWhite = new THREE.MeshStandardMaterial({ color: bellyColor, roughness: 0.95 });
+        const materialPink = new THREE.MeshStandardMaterial({ color: 0xffccd5, roughness: 0.6 });
+        const materialEyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 });
+        const materialIris = new THREE.MeshStandardMaterial({ color: 0x44aa66, roughness: 0.2, metalness: 0.1 }); // Green eyes!
+        const materialPupil = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.0 });
         const materialEyeHighlight = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const materialNose = new THREE.MeshStandardMaterial({ color: 0xff8899, roughness: 0.4 });
-        const materialWhisker = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const materialPawPad = new THREE.MeshStandardMaterial({ color: 0xffb6c1, roughness: 0.5 });
+        const materialNose = new THREE.MeshStandardMaterial({ color: 0xffaabb, roughness: 0.3 });
+        const materialPawPad = new THREE.MeshStandardMaterial({ color: 0xffb5c5, roughness: 0.4 });
+        const materialEyelid = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
 
-        // Body
+        // Body - rounder and cuter
         const bodyGroup = new THREE.Group();
-        const bodyGeo = new THREE.SphereGeometry(0.8, 24, 24);
-        bodyGeo.scale(1, 0.85, 1.3);
+        const bodyGeo = new THREE.SphereGeometry(0.7, 32, 32);
+        bodyGeo.scale(1, 0.9, 1.2);
         const body = new THREE.Mesh(bodyGeo, materialFur);
         body.castShadow = true;
         bodyGroup.add(body);
 
-        // Body stripes
-        for (let i = 0; i < 4; i++) {
+        // Fluffy chest tuft
+        const chestFluff = new THREE.Mesh(
+            new THREE.SphereGeometry(0.4, 16, 16),
+            materialWhite
+        );
+        chestFluff.position.set(0, 0.1, 0.5);
+        chestFluff.scale.set(0.9, 0.8, 0.5);
+        bodyGroup.add(chestFluff);
+
+        // Body stripes (more natural)
+        for (let i = 0; i < 5; i++) {
             const stripe = new THREE.Mesh(
-                new THREE.BoxGeometry(0.05, 0.5, 0.15),
+                new THREE.CapsuleGeometry(0.03, 0.35, 4, 8),
                 materialStripe
             );
-            stripe.position.set(0.75, 0.1, -0.3 + i * 0.25);
-            stripe.rotation.z = 0.3;
+            stripe.position.set(0.62 + Math.sin(i * 0.5) * 0.05, 0.15 - i * 0.08, -0.2 + i * 0.18);
+            stripe.rotation.z = 0.4 + i * 0.1;
+            stripe.rotation.x = -0.2;
             bodyGroup.add(stripe);
         }
 
-        bodyGroup.position.y = 1.2;
+        bodyGroup.position.y = 1.0;
         kittenGroup.add(bodyGroup);
 
-        // Chest (white)
-        const chest = new THREE.Mesh(
-            new THREE.SphereGeometry(0.35, 16, 16),
-            materialWhite
-        );
-        chest.position.set(0, 1.0, 0.6);
-        chest.scale.set(1, 1, 0.7);
-        chest.castShadow = true;
-        kittenGroup.add(chest);
-
-        // Head
+        // === HEAD - Much bigger for cute proportions ===
         const headGroup = new THREE.Group();
-        headGroup.position.set(0, 1.9, 1.1);
+        headGroup.position.set(0, 1.75, 0.9);
         kittenGroup.add(headGroup);
 
-        const headGeo = new THREE.SphereGeometry(0.6, 24, 24);
+        // Main head - bigger and rounder
+        const headGeo = new THREE.SphereGeometry(0.75, 32, 32);
         const head = new THREE.Mesh(headGeo, materialFur);
+        head.scale.set(1, 0.95, 0.9);
         head.castShadow = true;
         headGroup.add(head);
 
-        // Cheeks
-        const cheekGeo = new THREE.SphereGeometry(0.2, 16, 16);
+        // Forehead fluff
+        const foreheadFluff = new THREE.Mesh(
+            new THREE.SphereGeometry(0.25, 16, 16),
+            materialFur
+        );
+        foreheadFluff.position.set(0, 0.45, 0.4);
+        foreheadFluff.scale.set(1.5, 0.6, 0.5);
+        headGroup.add(foreheadFluff);
+
+        // Cheek fluffs - rounder and puffier
+        const cheekGeo = new THREE.SphereGeometry(0.28, 16, 16);
         const leftCheek = new THREE.Mesh(cheekGeo, materialWhite);
-        leftCheek.position.set(0.35, -0.15, 0.4);
-        leftCheek.scale.set(1, 0.8, 0.6);
+        leftCheek.position.set(0.4, -0.1, 0.45);
+        leftCheek.scale.set(0.9, 0.8, 0.6);
         headGroup.add(leftCheek);
 
         const rightCheek = new THREE.Mesh(cheekGeo, materialWhite);
-        rightCheek.position.set(-0.35, -0.15, 0.4);
-        rightCheek.scale.set(1, 0.8, 0.6);
+        rightCheek.position.set(-0.4, -0.1, 0.45);
+        rightCheek.scale.set(0.9, 0.8, 0.6);
         headGroup.add(rightCheek);
 
-        // Ears with inner pink
-        const earGeo = new THREE.ConeGeometry(0.18, 0.35, 16);
-        const earInnerGeo = new THREE.ConeGeometry(0.1, 0.25, 16);
+        // Muzzle
+        const muzzle = new THREE.Mesh(
+            new THREE.SphereGeometry(0.2, 16, 16),
+            materialWhite
+        );
+        muzzle.position.set(0, -0.15, 0.6);
+        muzzle.scale.set(1, 0.7, 0.8);
+        headGroup.add(muzzle);
+
+        // === EARS - Bigger and fluffier ===
+        const earGeo = new THREE.ConeGeometry(0.22, 0.45, 16);
+        const earInnerGeo = new THREE.ConeGeometry(0.13, 0.32, 16);
+        const earFluffGeo = new THREE.SphereGeometry(0.12, 8, 8);
 
         const leftEar = new THREE.Mesh(earGeo, materialFur);
-        leftEar.position.set(0.32, 0.5, 0.1);
-        leftEar.rotation.x = -0.15;
-        leftEar.rotation.z = -0.2;
+        leftEar.position.set(0.38, 0.55, 0.0);
+        leftEar.rotation.x = -0.1;
+        leftEar.rotation.z = -0.25;
         leftEar.castShadow = true;
         headGroup.add(leftEar);
 
         const leftEarInner = new THREE.Mesh(earInnerGeo, materialPink);
-        leftEarInner.position.set(0.32, 0.48, 0.15);
-        leftEarInner.rotation.x = -0.15;
-        leftEarInner.rotation.z = -0.2;
+        leftEarInner.position.set(0.38, 0.52, 0.06);
+        leftEarInner.rotation.x = -0.1;
+        leftEarInner.rotation.z = -0.25;
         headGroup.add(leftEarInner);
 
+        // Ear tufts (fluffy inside)
+        const leftEarTuft = new THREE.Mesh(earFluffGeo, materialWhite);
+        leftEarTuft.position.set(0.38, 0.35, 0.08);
+        leftEarTuft.scale.set(0.8, 1.2, 0.5);
+        headGroup.add(leftEarTuft);
+
         const rightEar = new THREE.Mesh(earGeo, materialFur);
-        rightEar.position.set(-0.32, 0.5, 0.1);
-        rightEar.rotation.x = -0.15;
-        rightEar.rotation.z = 0.2;
+        rightEar.position.set(-0.38, 0.55, 0.0);
+        rightEar.rotation.x = -0.1;
+        rightEar.rotation.z = 0.25;
         rightEar.castShadow = true;
         headGroup.add(rightEar);
 
         const rightEarInner = new THREE.Mesh(earInnerGeo, materialPink);
-        rightEarInner.position.set(-0.32, 0.48, 0.15);
-        rightEarInner.rotation.x = -0.15;
-        rightEarInner.rotation.z = 0.2;
+        rightEarInner.position.set(-0.38, 0.52, 0.06);
+        rightEarInner.rotation.x = -0.1;
+        rightEarInner.rotation.z = 0.25;
         headGroup.add(rightEarInner);
 
-        // Eyes - detailed with pupils and highlights
+        const rightEarTuft = new THREE.Mesh(earFluffGeo, materialWhite);
+        rightEarTuft.position.set(-0.38, 0.35, 0.08);
+        rightEarTuft.scale.set(0.8, 1.2, 0.5);
+        headGroup.add(rightEarTuft);
+
+        // === EYES - Much bigger and more expressive ===
         const eyeGroup = new THREE.Group();
 
-        // Left eye
-        const leftEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), materialEyeWhite);
-        leftEyeWhite.position.set(0.22, 0.08, 0.48);
-        leftEyeWhite.scale.z = 0.5;
-        eyeGroup.add(leftEyeWhite);
+        // Left eye socket (slight indent)
+        const leftEyeSocket = new THREE.Group();
+        leftEyeSocket.position.set(0.26, 0.1, 0.5);
+        eyeGroup.add(leftEyeSocket);
 
-        const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 16), materialPupil);
-        leftPupil.position.set(0.22, 0.08, 0.54);
-        leftPupil.scale.z = 0.3;
-        eyeGroup.add(leftPupil);
+        const leftEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
+        leftEyeWhite.scale.z = 0.4;
+        leftEyeSocket.add(leftEyeWhite);
 
-        const leftHighlight = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), materialEyeHighlight);
-        leftHighlight.position.set(0.25, 0.12, 0.56);
-        eyeGroup.add(leftHighlight);
+        // Iris (colored part) - bigger and more visible
+        const leftIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
+        leftIris.position.z = 0.04;
+        leftIris.scale.z = 0.3;
+        leftEyeSocket.add(leftIris);
 
-        // Right eye
-        const rightEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), materialEyeWhite);
-        rightEyeWhite.position.set(-0.22, 0.08, 0.48);
-        rightEyeWhite.scale.z = 0.5;
-        eyeGroup.add(rightEyeWhite);
+        // Pupil - vertical slit that can dilate
+        const leftPupilGroup = new THREE.Group();
+        leftPupilGroup.position.z = 0.06;
+        leftEyeSocket.add(leftPupilGroup);
 
-        const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 16), materialPupil);
-        rightPupil.position.set(-0.22, 0.08, 0.54);
-        rightPupil.scale.z = 0.3;
-        eyeGroup.add(rightPupil);
+        const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
+        leftPupil.scale.set(0.5, 1, 0.2);
+        leftPupilGroup.add(leftPupil);
 
-        const rightHighlight = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), materialEyeHighlight);
-        rightHighlight.position.set(-0.19, 0.12, 0.56);
-        eyeGroup.add(rightHighlight);
+        // Eye highlights (two for that cute anime look)
+        const leftHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
+        leftHighlight1.position.set(0.05, 0.06, 0.07);
+        leftEyeSocket.add(leftHighlight1);
+
+        const leftHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
+        leftHighlight2.position.set(-0.03, -0.04, 0.07);
+        leftEyeSocket.add(leftHighlight2);
+
+        // Eyelid for blinking
+        const leftEyelid = new THREE.Mesh(
+            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+            materialEyelid
+        );
+        leftEyelid.rotation.x = Math.PI;
+        leftEyelid.position.z = 0.01;
+        leftEyelid.scale.z = 0.5;
+        leftEyelid.visible = false;
+        leftEyeSocket.add(leftEyelid);
+
+        // Right eye (mirror of left)
+        const rightEyeSocket = new THREE.Group();
+        rightEyeSocket.position.set(-0.26, 0.1, 0.5);
+        eyeGroup.add(rightEyeSocket);
+
+        const rightEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
+        rightEyeWhite.scale.z = 0.4;
+        rightEyeSocket.add(rightEyeWhite);
+
+        const rightIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
+        rightIris.position.z = 0.04;
+        rightIris.scale.z = 0.3;
+        rightEyeSocket.add(rightIris);
+
+        const rightPupilGroup = new THREE.Group();
+        rightPupilGroup.position.z = 0.06;
+        rightEyeSocket.add(rightPupilGroup);
+
+        const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
+        rightPupil.scale.set(0.5, 1, 0.2);
+        rightPupilGroup.add(rightPupil);
+
+        const rightHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
+        rightHighlight1.position.set(0.05, 0.06, 0.07);
+        rightEyeSocket.add(rightHighlight1);
+
+        const rightHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
+        rightHighlight2.position.set(-0.03, -0.04, 0.07);
+        rightEyeSocket.add(rightHighlight2);
+
+        const rightEyelid = new THREE.Mesh(
+            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+            materialEyelid
+        );
+        rightEyelid.rotation.x = Math.PI;
+        rightEyelid.position.z = 0.01;
+        rightEyelid.scale.z = 0.5;
+        rightEyelid.visible = false;
+        rightEyeSocket.add(rightEyelid);
 
         headGroup.add(eyeGroup);
 
-        // Nose
-        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 12), materialNose);
-        nose.position.set(0, -0.05, 0.58);
-        nose.scale.set(1.2, 0.8, 0.6);
+        // Eye state for blinking and expressions
+        let blinkTimer = 0;
+        let isBlinking = false;
+        let blinkProgress = 0;
+        let pupilDilation = 1.0; // 1.0 = normal, 0.5 = dilated (excited), 1.5 = slits (bright/alert)
+
+        // === NOSE - Cute pink triangle ===
+        const noseGeo = new THREE.SphereGeometry(0.08, 12, 12);
+        const nose = new THREE.Mesh(noseGeo, materialNose);
+        nose.position.set(0, -0.12, 0.68);
+        nose.scale.set(1.0, 0.7, 0.5);
         headGroup.add(nose);
 
-        // Mouth
-        const mouthGroup = new THREE.Group();
-        const mouthCurve1 = new THREE.Line(
-            new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(0.08, -0.06, 0),
-                new THREE.Vector3(0.12, -0.04, 0)
-            ]),
-            new THREE.LineBasicMaterial({ color: 0x333333 })
+        // Nose shine
+        const noseShine = new THREE.Mesh(
+            new THREE.SphereGeometry(0.02, 8, 8),
+            materialEyeHighlight
         );
-        mouthCurve1.position.set(0, -0.12, 0.55);
-        mouthGroup.add(mouthCurve1);
+        noseShine.position.set(0.02, -0.10, 0.71);
+        headGroup.add(noseShine);
 
-        const mouthCurve2 = new THREE.Line(
+        // === MOUTH - Cute cat smile ===
+        const mouthGroup = new THREE.Group();
+        mouthGroup.position.set(0, -0.2, 0.62);
+
+        // Create a cute W-shaped mouth using curves
+        const mouthMat = new THREE.LineBasicMaterial({ color: 0x444444, linewidth: 2 });
+
+        // Center vertical line from nose
+        const noseLine = new THREE.Line(
             new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(-0.08, -0.06, 0),
-                new THREE.Vector3(-0.12, -0.04, 0)
+                new THREE.Vector3(0, 0.06, 0),
+                new THREE.Vector3(0, 0, 0)
             ]),
-            new THREE.LineBasicMaterial({ color: 0x333333 })
+            mouthMat
         );
-        mouthCurve2.position.set(0, -0.12, 0.55);
-        mouthGroup.add(mouthCurve2);
+        mouthGroup.add(noseLine);
+
+        // Left curve
+        const leftMouthCurve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0.06, -0.04, 0),
+            new THREE.Vector3(0.12, 0, 0)
+        );
+        const leftMouth = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(leftMouthCurve.getPoints(10)),
+            mouthMat
+        );
+        mouthGroup.add(leftMouth);
+
+        // Right curve
+        const rightMouthCurve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(-0.06, -0.04, 0),
+            new THREE.Vector3(-0.12, 0, 0)
+        );
+        const rightMouth = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(rightMouthCurve.getPoints(10)),
+            mouthMat
+        );
+        mouthGroup.add(rightMouth);
+
         headGroup.add(mouthGroup);
 
-        // Whiskers - using thin cylinders for visibility
-        const whiskerMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+        // Tongue (hidden, shown when meowing/yawning)
+        const tongue = new THREE.Mesh(
+            new THREE.SphereGeometry(0.06, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xff6b8a })
+        );
+        tongue.position.set(0, -0.22, 0.6);
+        tongue.scale.set(1.2, 0.5, 1);
+        tongue.visible = false;
+        headGroup.add(tongue);
+
+        // === WHISKERS - Longer and more visible ===
+        const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
         const whiskers = [];
 
-        function createWhisker(x, y, z, angleY, angleZ) {
-            const whiskerGeo = new THREE.CylinderGeometry(0.008, 0.004, 0.5, 4);
+        function createWhisker(x, y, z, angleY, angleZ, length = 0.6) {
+            const whiskerGeo = new THREE.CylinderGeometry(0.008, 0.003, length, 4);
             whiskerGeo.rotateX(Math.PI / 2);
             const whisker = new THREE.Mesh(whiskerGeo, whiskerMat);
             whisker.position.set(x, y, z);
@@ -533,80 +879,106 @@
             return whisker;
         }
 
-        // Left whiskers
-        createWhisker(0.22, -0.06, 0.5, 0.4, 0.15);
-        createWhisker(0.22, -0.10, 0.5, 0.35, 0);
-        createWhisker(0.22, -0.14, 0.5, 0.4, -0.15);
+        // Left whiskers (3 per side, longer)
+        createWhisker(0.28, -0.08, 0.55, 0.35, 0.2, 0.7);
+        createWhisker(0.28, -0.13, 0.55, 0.3, 0, 0.75);
+        createWhisker(0.28, -0.18, 0.55, 0.35, -0.15, 0.65);
 
         // Right whiskers
-        createWhisker(-0.22, -0.06, 0.5, -0.4, -0.15);
-        createWhisker(-0.22, -0.10, 0.5, -0.35, 0);
-        createWhisker(-0.22, -0.14, 0.5, -0.4, 0.15);
+        createWhisker(-0.28, -0.08, 0.55, -0.35, -0.2, 0.7);
+        createWhisker(-0.28, -0.13, 0.55, -0.3, 0, 0.75);
+        createWhisker(-0.28, -0.18, 0.55, -0.35, 0.15, 0.65);
 
-        // Forehead stripes (tabby M pattern hint)
-        const foreheadStripe = new THREE.Mesh(
-            new THREE.BoxGeometry(0.15, 0.04, 0.02),
-            materialStripe
-        );
-        foreheadStripe.position.set(0, 0.35, 0.52);
-        foreheadStripe.rotation.x = -0.5;
-        headGroup.add(foreheadStripe);
+        // Eyebrow whiskers (shorter)
+        createWhisker(0.35, 0.25, 0.45, 0.5, 0.4, 0.25);
+        createWhisker(-0.35, 0.25, 0.45, -0.5, -0.4, 0.25);
 
-        // Articulated legs with joints
+        // Forehead M pattern (tabby marking)
+        const mPatternGroup = new THREE.Group();
+        const stripeMat = materialStripe;
+
+        // M shape stripes
+        const mStripe1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.15, 4, 8), stripeMat);
+        mStripe1.position.set(0.12, 0.4, 0.58);
+        mStripe1.rotation.z = -0.5;
+        mPatternGroup.add(mStripe1);
+
+        const mStripe2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.15, 4, 8), stripeMat);
+        mStripe2.position.set(-0.12, 0.4, 0.58);
+        mStripe2.rotation.z = 0.5;
+        mPatternGroup.add(mStripe2);
+
+        const mStripe3 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.12, 4, 8), stripeMat);
+        mStripe3.position.set(0.06, 0.35, 0.6);
+        mStripe3.rotation.z = 0.4;
+        mPatternGroup.add(mStripe3);
+
+        const mStripe4 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.12, 4, 8), stripeMat);
+        mStripe4.position.set(-0.06, 0.35, 0.6);
+        mStripe4.rotation.z = -0.4;
+        mPatternGroup.add(mStripe4);
+
+        headGroup.add(mPatternGroup);
+
+        // === LEGS - Chubbier and cuter ===
         const legs = [];
-        const upperLegGeo = new THREE.CylinderGeometry(0.12, 0.10, 0.45, 10);
-        const lowerLegGeo = new THREE.CylinderGeometry(0.10, 0.08, 0.45, 10);
-        const pawGeo = new THREE.SphereGeometry(0.12, 12, 12);
-        const pawPadGeo = new THREE.SphereGeometry(0.05, 8, 8);
+        const upperLegGeo = new THREE.CapsuleGeometry(0.1, 0.3, 8, 12);
+        const lowerLegGeo = new THREE.CapsuleGeometry(0.09, 0.28, 8, 12);
+        const pawGeo = new THREE.SphereGeometry(0.13, 16, 16);
+        const pawPadGeo = new THREE.SphereGeometry(0.045, 8, 8);
+        const toeGeo = new THREE.SphereGeometry(0.025, 6, 6);
 
         function createLeg(x, z, name) {
-            // Hip joint (attaches to body)
             const hipJoint = new THREE.Group();
-            hipJoint.position.set(x, 1.0, z);
+            hipJoint.position.set(x, 0.85, z);
 
-            // Upper leg
+            // Upper leg (thigh)
             const upperLeg = new THREE.Mesh(upperLegGeo, materialFur);
-            upperLeg.position.y = -0.22;
+            upperLeg.position.y = -0.18;
             upperLeg.castShadow = true;
             hipJoint.add(upperLeg);
 
             // Knee joint
             const kneeJoint = new THREE.Group();
-            kneeJoint.position.y = -0.45;
+            kneeJoint.position.y = -0.38;
             hipJoint.add(kneeJoint);
 
             // Lower leg
             const lowerLeg = new THREE.Mesh(lowerLegGeo, materialFur);
-            lowerLeg.position.y = -0.22;
+            lowerLeg.position.y = -0.18;
             lowerLeg.castShadow = true;
             kneeJoint.add(lowerLeg);
 
-            // Ankle/Paw joint
+            // Ankle joint
             const ankleJoint = new THREE.Group();
-            ankleJoint.position.y = -0.45;
+            ankleJoint.position.y = -0.38;
             kneeJoint.add(ankleJoint);
 
-            // Paw
+            // Paw - rounder and cuter
             const paw = new THREE.Mesh(pawGeo, materialFur);
-            paw.scale.set(1.1, 0.5, 1.3);
+            paw.scale.set(1.2, 0.5, 1.4);
             paw.castShadow = true;
             ankleJoint.add(paw);
 
-            // Paw pads
+            // Main paw pad (big pink bean)
             const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
-            mainPad.position.set(0, -0.03, 0.06);
-            mainPad.scale.set(1.4, 0.4, 1.0);
+            mainPad.position.set(0, -0.04, 0.04);
+            mainPad.scale.set(1.8, 0.5, 1.4);
             ankleJoint.add(mainPad);
 
-            // Toe beans
-            for (let i = 0; i < 3; i++) {
-                const toePad = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.025, 6, 6),
-                    materialPawPad
-                );
-                toePad.position.set(-0.05 + i * 0.05, -0.03, 0.12);
-                ankleJoint.add(toePad);
-            }
+            // Toe beans! (4 little pink beans)
+            const toePositions = [
+                [-0.06, -0.04, 0.11],
+                [-0.02, -0.04, 0.13],
+                [0.02, -0.04, 0.13],
+                [0.06, -0.04, 0.11]
+            ];
+            toePositions.forEach(pos => {
+                const toe = new THREE.Mesh(toeGeo, materialPawPad);
+                toe.position.set(...pos);
+                toe.scale.set(1, 0.6, 1);
+                ankleJoint.add(toe);
+            });
 
             kittenGroup.add(hipJoint);
             legs.push({
@@ -618,43 +990,65 @@
             return hipJoint;
         }
 
-        const legFL = createLeg(0.35, 0.55, 'FL');
-        const legFR = createLeg(-0.35, 0.55, 'FR');
-        const legBL = createLeg(0.35, -0.55, 'BL');
-        const legBR = createLeg(-0.35, -0.55, 'BR');
+        const legFL = createLeg(0.32, 0.45, 'FL');
+        const legFR = createLeg(-0.32, 0.45, 'FR');
+        const legBL = createLeg(0.32, -0.45, 'BL');
+        const legBR = createLeg(-0.32, -0.45, 'BR');
 
-        // Tail - segmented for better animation
+        // Tail - fluffy and expressive
         const tailGroup = new THREE.Group();
-        tailGroup.position.set(0, 1.35, -0.85);
+        tailGroup.position.set(0, 1.1, -0.6);
         kittenGroup.add(tailGroup);
 
         const tailSegments = [];
-        const numTailSegments = 6;
+        const numTailSegments = 8;
         let prevSegment = tailGroup;
 
         for (let i = 0; i < numTailSegments; i++) {
             const segmentGroup = new THREE.Group();
-            const radius = 0.1 - i * 0.012;
+            // Tail gets thinner toward tip but stays fluffy
+            const radius = 0.12 - i * 0.01;
+            const fluffRadius = radius * 1.3;
+
+            // Inner core
             const segment = new THREE.Mesh(
-                new THREE.CylinderGeometry(radius, radius - 0.01, 0.22, 8),
-                i % 2 === 0 ? materialFur : materialStripe
+                new THREE.CapsuleGeometry(radius * 0.7, 0.15, 4, 8),
+                i % 3 === 1 ? materialStripe : materialFur
             );
-            segment.position.y = 0.11;
+            segment.position.y = 0.1;
             segment.castShadow = true;
             segmentGroup.add(segment);
 
-            segmentGroup.position.y = i === 0 ? 0 : 0.2;
-            segmentGroup.rotation.x = -0.15;
+            // Fluffy outer layer
+            const fluff = new THREE.Mesh(
+                new THREE.SphereGeometry(fluffRadius, 8, 8),
+                materialFur
+            );
+            fluff.position.y = 0.1;
+            fluff.scale.set(1, 1.2, 1);
+            segmentGroup.add(fluff);
+
+            segmentGroup.position.y = i === 0 ? 0 : 0.18;
+            segmentGroup.rotation.x = -0.2;
 
             if (i === 0) {
                 tailGroup.add(segmentGroup);
             } else {
-                prevSegment.children[0].parent.add(segmentGroup);
+                prevSegment.add(segmentGroup);
             }
 
             tailSegments.push(segmentGroup);
             prevSegment = segmentGroup;
         }
+
+        // Fluffy tail tip
+        const tailTip = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08, 8, 8),
+            materialFur
+        );
+        tailTip.position.y = 0.15;
+        tailTip.scale.set(1.5, 1.8, 1.5);
+        prevSegment.add(tailTip);
 
         // --- PARTICLES ---
         const hearts = [];
@@ -983,7 +1377,10 @@
             'MEOW': '😺 Meowing',
             'LASER': '🔴 Chasing Laser',
             'SCRATCH': '🐾 Scratching',
-            'SUNBATHE': '☀️ Sunbathing'
+            'SUNBATHE': '☀️ Sunbathing',
+            'ZOOMIES': '⚡ ZOOMIES!',
+            'ROLLOVER': '🙃 Rolling Over',
+            'CURIOUS': '🔍 Curious'
         };
 
         function setState(newState, goal = null) {
@@ -1081,8 +1478,15 @@
 
             // Fun activities based on energy level
             if (stats.energy > 60) {
+                // ZOOMIES! Random sudden burst of energy (10% chance when high energy)
+                if (stats.energy > 80 && rand < 0.1) {
+                    setState('ZOOMIES');
+                    stateTimer = 4 + Math.random() * 3;
+                    return;
+                }
+
                 // Energetic - play with toys!
-                if (interestingToy && rand < 0.6) {
+                if (interestingToy && rand < 0.5) {
                     targetToy = interestingToy;
                     setState('HUNT', 'toy');
                     stateTimer = 8;
@@ -1095,19 +1499,31 @@
                     stateTimer = 8;
                     return;
                 }
+
+                // Might roll over playfully
+                if (rand < 0.08) {
+                    setState('ROLLOVER');
+                    stateTimer = 3;
+                    return;
+                }
             }
 
             // Random behaviors
-            if (rand < 0.15) {
+            if (rand < 0.12) {
                 setState('GROOM');
                 stateTimer = 3 + Math.random() * 2;
-            } else if (rand < 0.25) {
+            } else if (rand < 0.2) {
                 setState('STRETCH');
                 stateTimer = 2;
-            } else if (rand < 0.32) {
+            } else if (rand < 0.26) {
                 setState('MEOW');
                 stateTimer = 1.5;
                 showMeow();
+            } else if (rand < 0.32) {
+                // Get curious about something
+                setState('CURIOUS');
+                targetPos = pickRandomPoint(5);
+                stateTimer = 4;
             } else if (rand < 0.5 && interestingToy) {
                 targetToy = interestingToy;
                 setState('HUNT', 'toy');
@@ -1331,10 +1747,36 @@
             cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.01, 6, 25);
         }
 
+        // Pinch-to-zoom support for mobile
+        let lastPinchDistance = 0;
+        function getTouchDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches.length === 2) {
+                lastPinchDistance = getTouchDistance(event.touches);
+            }
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                const currentDistance = getTouchDistance(event.touches);
+                const delta = lastPinchDistance - currentDistance;
+                cameraDistance = THREE.MathUtils.clamp(cameraDistance + delta * 0.05, 6, 25);
+                lastPinchDistance = currentDistance;
+            }
+        }
+
         window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
         window.addEventListener('wheel', onWheel);
+        window.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
 
         // --- ANIMATION ---
         const clock = new THREE.Clock();
@@ -1355,6 +1797,104 @@
             // Animate dangling toy
             danglingToy.position.x = 0.6 + Math.sin(time * 2) * 0.15;
             danglingToy.position.y = 3.5 + Math.sin(time * 3) * 0.1;
+
+            // === ENVIRONMENT ANIMATIONS ===
+            // Birds flying past window
+            birds.forEach((bird, index) => {
+                bird.mesh.position.z -= bird.speed * dt;
+
+                // Flap wings
+                const flapAngle = Math.sin(time * bird.flapSpeed) * 0.5;
+                bird.leftWing.rotation.z = 0.3 + flapAngle;
+                bird.rightWing.rotation.z = -0.3 - flapAngle;
+
+                // Bob up and down slightly
+                bird.mesh.position.y += Math.sin(time * 2 + index) * 0.002;
+
+                // Reset when off screen
+                if (bird.mesh.position.z < -5) {
+                    bird.mesh.position.z = 5;
+                    bird.mesh.position.y = 5.5 + Math.random() * 1.5;
+                    bird.speed = 1.5 + Math.random();
+
+                    // Kitten might notice birds!
+                    if (state === 'IDLE' && Math.random() < 0.3) {
+                        // Look at window
+                        headGroup.rotation.y = 0.8;
+                        leftEar.rotation.z = -0.1;
+                        rightEar.rotation.z = 0.1;
+                    }
+                }
+            });
+
+            // Clouds drifting
+            clouds.forEach(cloud => {
+                cloud.mesh.position.z -= cloud.speed * dt;
+                if (cloud.mesh.position.z < -4) {
+                    cloud.mesh.position.z = 4;
+                }
+            });
+
+            // Dust motes floating in sunbeam
+            dustMotes.forEach(dust => {
+                dust.mesh.position.y = dust.baseY + Math.sin(time * dust.speed + dust.phase) * 0.3;
+                dust.mesh.position.x += dust.driftX * dt * 0.05;
+                dust.mesh.position.z += dust.driftZ * dt * 0.05;
+
+                // Wrap around within sunbeam area
+                if (dust.mesh.position.x > 7) dust.mesh.position.x = 3;
+                if (dust.mesh.position.x < 3) dust.mesh.position.x = 7;
+                if (dust.mesh.position.z > 4) dust.mesh.position.z = 0;
+                if (dust.mesh.position.z < 0) dust.mesh.position.z = 4;
+            });
+
+            // === KITTEN BLINKING ===
+            blinkTimer -= dt;
+            if (blinkTimer <= 0 && !isBlinking) {
+                // Start a blink randomly every 2-6 seconds
+                isBlinking = true;
+                blinkProgress = 0;
+                blinkTimer = 2 + Math.random() * 4;
+            }
+
+            if (isBlinking) {
+                blinkProgress += dt * 8; // Blink speed
+                if (blinkProgress < 1) {
+                    // Closing
+                    const closeAmount = blinkProgress;
+                    leftEyelid.visible = true;
+                    rightEyelid.visible = true;
+                    leftEyelid.scale.y = closeAmount;
+                    rightEyelid.scale.y = closeAmount;
+                    leftEyeWhite.scale.y = 1 - closeAmount * 0.8;
+                    rightEyeWhite.scale.y = 1 - closeAmount * 0.8;
+                } else if (blinkProgress < 2) {
+                    // Opening
+                    const openAmount = blinkProgress - 1;
+                    leftEyelid.scale.y = 1 - openAmount;
+                    rightEyelid.scale.y = 1 - openAmount;
+                    leftEyeWhite.scale.y = 0.2 + openAmount * 0.8;
+                    rightEyeWhite.scale.y = 0.2 + openAmount * 0.8;
+                } else {
+                    // Done blinking
+                    isBlinking = false;
+                    leftEyelid.visible = false;
+                    rightEyelid.visible = false;
+                    leftEyeWhite.scale.y = 1;
+                    rightEyeWhite.scale.y = 1;
+                }
+            }
+
+            // Pupil dilation based on state/environment
+            let targetDilation = 1.0;
+            if (state === 'HUNT' || state === 'PLAY' || state === 'LASER') {
+                targetDilation = 1.8; // Dilated (excited)
+            } else if (state === 'SLEEP' || state === 'SUNBATHE') {
+                targetDilation = 0.6; // Relaxed slits
+            }
+            pupilDilation = THREE.MathUtils.lerp(pupilDilation, targetDilation, 2 * dt);
+            leftPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
+            rightPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
 
             // Slowly decrease stats
             stats.happiness = Math.max(0, stats.happiness - dt * 0.5);
@@ -1907,6 +2447,158 @@
                     setState('IDLE');
                     stateTimer = 2;
                     updateStatsUI();
+                }
+            }
+            else if (state === 'ZOOMIES') {
+                // ZOOMIES! Crazy random running around
+                stateTimer -= dt;
+
+                // Pick new random direction frequently
+                if (Math.random() < 0.05) {
+                    targetPos = pickRandomPoint(8);
+                }
+
+                const direction = targetPos.clone().sub(kittenGroup.position);
+                direction.y = 0;
+
+                if (direction.length() > 0.5) {
+                    direction.normalize();
+
+                    // Very fast rotation
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    let rotDiff = targetRotation - kittenGroup.rotation.y;
+                    while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                    while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                    kittenGroup.rotation.y += rotDiff * 10 * dt;
+
+                    // RUN FAST!
+                    kittenGroup.position.add(direction.multiplyScalar(6 * dt));
+                }
+
+                // Bouncy running
+                kittenGroup.position.y = Math.abs(Math.sin(time * 20) * 0.15);
+
+                // Crazy fast leg movement
+                legs.forEach((leg, i) => {
+                    const phase = Math.sin(time * 25 + i * Math.PI / 2);
+                    leg.mesh.rotation.x = phase * 0.7;
+                    leg.knee.rotation.x = Math.max(0, -phase) * 0.9;
+                });
+
+                // Wild tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 15 + i) * 0.6;
+                    seg.rotation.x = -0.2 + Math.cos(time * 12 + i) * 0.3;
+                });
+
+                // Wide eyes during zoomies
+                leftPupil.scale.set(0.8, 1.2, 0.2);
+                rightPupil.scale.set(0.8, 1.2, 0.2);
+
+                // Ears back
+                leftEar.rotation.z = -0.4;
+                rightEar.rotation.z = 0.4;
+
+                stats.energy = Math.max(0, stats.energy - dt * 4);
+
+                // Keep in bounds
+                kittenGroup.position.x = THREE.MathUtils.clamp(kittenGroup.position.x, -9, 9);
+                kittenGroup.position.z = THREE.MathUtils.clamp(kittenGroup.position.z, -9, 9);
+
+                if (stateTimer <= 0 || stats.energy < 20) {
+                    setState('IDLE');
+                    stateTimer = 3;
+                    leftEar.rotation.z = -0.25;
+                    rightEar.rotation.z = 0.25;
+                }
+            }
+            else if (state === 'ROLLOVER') {
+                // Rolling over for belly rubs
+                stateTimer -= dt;
+
+                const progress = 1 - (stateTimer / 3);
+
+                // Roll onto back
+                if (progress < 0.3) {
+                    kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, Math.PI * 0.9, 5 * dt);
+                    kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.4, 5 * dt);
+                } else if (progress < 0.7) {
+                    // Wiggle on back
+                    kittenGroup.rotation.z = Math.PI * 0.9 + Math.sin(time * 8) * 0.15;
+                    // Paws in air wiggling
+                    legs.forEach((leg, i) => {
+                        leg.mesh.rotation.x = -0.5 + Math.sin(time * 6 + i) * 0.3;
+                        leg.knee.rotation.x = 0.5 + Math.sin(time * 8 + i) * 0.2;
+                    });
+                    // Happy squinty eyes
+                    leftPupil.scale.y = 0.4;
+                    rightPupil.scale.y = 0.4;
+                } else {
+                    // Roll back over
+                    kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0, 5 * dt);
+                    kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0, 5 * dt);
+                }
+
+                // Tail swishing happily
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 6 + i * 0.5) * 0.4;
+                });
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 2);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'CURIOUS') {
+                // Investigating something curiously
+                stateTimer -= dt;
+
+                const direction = targetPos.clone().sub(kittenGroup.position);
+                direction.y = 0;
+                const dist = direction.length();
+
+                if (dist > 0.5) {
+                    // Slow cautious approach
+                    direction.normalize();
+                    kittenGroup.position.add(direction.multiplyScalar(1.2 * dt));
+
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    kittenGroup.rotation.y = THREE.MathUtils.lerp(kittenGroup.rotation.y, targetRotation, 3 * dt);
+                }
+
+                // Head tilted curiously
+                headGroup.rotation.z = Math.sin(time * 2) * 0.15;
+
+                // Ears perked forward
+                leftEar.rotation.x = -0.3;
+                rightEar.rotation.x = -0.3;
+                leftEar.rotation.z = -0.15;
+                rightEar.rotation.z = 0.15;
+
+                // Slight crouch
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.1, 3 * dt);
+
+                // Tail held high, tip twitching
+                tailSegments[0].rotation.x = -0.5;
+                tailSegments.forEach((seg, i) => {
+                    if (i > 4) {
+                        seg.rotation.z = Math.sin(time * 10) * 0.2;
+                    }
+                });
+
+                // Sniffing motion
+                nose.position.z = 0.68 + Math.sin(time * 8) * 0.02;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 1.5;
+                    headGroup.rotation.z = 0;
+                    leftEar.rotation.x = -0.1;
+                    rightEar.rotation.x = -0.1;
+                    nose.position.z = 0.68;
                 }
             }
 
