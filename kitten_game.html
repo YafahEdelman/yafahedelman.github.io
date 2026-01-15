@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D Kitten Simulator - AI Designed Tiny Games</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.150.0/build/three.min.js" onerror="this.onerror=null;this.src='three.min.js';"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         canvas { touch-action: none; display: block; }
@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v2.0.1</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v2.1.0</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -728,32 +728,69 @@
 
         // === FUR SHELL SYSTEM ===
         // Create procedural fur alpha texture
-        function createFurTexture(size = 256) {
+        function createFurTexture(size = 512) {
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
 
-            // Black background (transparent areas)
-            ctx.fillStyle = '#000000';
+            // Use Perlin-like noise for softer, more natural fur
+            // Start with mid-gray base
+            ctx.fillStyle = '#404040';
             ctx.fillRect(0, 0, size, size);
 
-            // White dots representing hair strand cross-sections
-            ctx.fillStyle = '#ffffff';
-            const density = 3000; // Number of hair strands
-            for (let i = 0; i < density; i++) {
+            // Layer 1: Large soft blobs for base variation
+            ctx.globalAlpha = 0.4;
+            for (let i = 0; i < 200; i++) {
                 const x = Math.random() * size;
                 const y = Math.random() * size;
-                const radius = 0.8 + Math.random() * 1.2;
+                const radius = 8 + Math.random() * 15;
+                const brightness = Math.random() > 0.5 ? '#666666' : '#2a2a2a';
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                gradient.addColorStop(0, brightness);
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
                 ctx.beginPath();
                 ctx.arc(x, y, radius, 0, Math.PI * 2);
                 ctx.fill();
             }
 
+            // Layer 2: Hair strands - denser, finer dots
+            ctx.globalAlpha = 1.0;
+            const density = 12000;
+            for (let i = 0; i < density; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                const radius = 0.4 + Math.random() * 0.6;
+                // Higher brightness for better visibility
+                const brightness = 200 + Math.floor(Math.random() * 55);
+                ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Layer 3: Soft glow spots for fluffy highlights
+            ctx.globalAlpha = 0.25;
+            for (let i = 0; i < 300; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                const radius = 3 + Math.random() * 5;
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                gradient.addColorStop(0, '#ffffff');
+                gradient.addColorStop(0.5, '#888888');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+
             const texture = new THREE.CanvasTexture(canvas);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
-            texture.repeat.set(8, 8);
+            texture.repeat.set(5, 5);
             return texture;
         }
 
@@ -811,19 +848,25 @@
                 vec4 furSample = texture2D(furTexture, vUv);
 
                 // Calculate alpha threshold - strands taper toward tips
+                // Use a smooth cubic curve for natural tapering
                 float normalizedHeight = shellIndex / shellCount;
-                float alphaThreshold = mix(0.1, 0.7, normalizedHeight);
+                float t = normalizedHeight * normalizedHeight * (3.0 - 2.0 * normalizedHeight);
+                float alphaThreshold = mix(0.2, 0.5, t);
 
                 // Discard pixels below threshold (creates strand pattern)
                 if (furSample.r < alphaThreshold) {
                     discard;
                 }
 
-                // Blend base color to tip color
-                vec3 color = mix(furColor, tipColor, normalizedHeight * 0.5);
+                // Blend base color to tip color - more visible gradient
+                vec3 color = mix(furColor, tipColor, normalizedHeight * 0.7);
 
-                // Simple lighting
-                float light = 0.6 + 0.4 * dot(vNormal, vec3(0.3, 1.0, 0.3));
+                // Add subtle ambient occlusion at base (darker between strands)
+                float ao = mix(0.7, 1.0, normalizedHeight);
+                color *= ao;
+
+                // Better lighting with rim effect
+                float light = 0.5 + 0.5 * dot(vNormal, normalize(vec3(0.3, 1.0, 0.5)));
                 color *= light;
 
                 // Slight alpha fade at tips for softer look
@@ -835,8 +878,8 @@
 
         // Function to create fur shells for a mesh
         const furShells = [];
-        const SHELL_COUNT = 12;
-        const FUR_LENGTH = 0.08;
+        const SHELL_COUNT = 16;
+        const FUR_LENGTH = 0.1;
 
         function createFurShells(geometry, baseColor, tipColor, parent, position, scale, rotation) {
             const shells = [];
