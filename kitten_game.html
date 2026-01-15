@@ -337,30 +337,86 @@
         const frameMiddle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 0.2), frameMat);
         windowFrame.add(frameMiddle);
 
-        const windowGlass = new THREE.Mesh(
-            new THREE.PlaneGeometry(4.4, 3.7),
-            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4 })
+        // Create openable window panes (two halves)
+        const windowGlassLeft = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.1, 3.7),
+            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4, side: THREE.FrontSide })
         );
-        windowGlass.position.z = -0.1;
-        windowFrame.add(windowGlass);
+        windowGlassLeft.position.set(-1.1, 0, -0.1);
+        windowGlassLeft.userData.isWindow = true;
+        windowGlassLeft.userData.windowSide = 'left';
+        windowFrame.add(windowGlassLeft);
+
+        const windowGlassRight = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.1, 3.7),
+            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4, side: THREE.FrontSide })
+        );
+        windowGlassRight.position.set(1.1, 0, -0.1);
+        windowGlassRight.userData.isWindow = true;
+        windowGlassRight.userData.windowSide = 'right';
+        windowFrame.add(windowGlassRight);
+
         windowFrame.position.set(-14.8, 5, 0);
         windowFrame.rotation.y = Math.PI / 2;
         scene.add(windowFrame);
 
-        // Sky background visible through window
+        // Window state
+        let windowOpen = false;
+        const windowPanes = { left: windowGlassLeft, right: windowGlassRight };
+        let windowAnimating = false;
+
+        // Toggle window open/close with animation
+        function toggleWindow() {
+            if (windowAnimating) return;
+            windowAnimating = true;
+            windowOpen = !windowOpen;
+
+            const targetAngle = windowOpen ? Math.PI * 0.4 : 0;
+            const startLeft = windowPanes.left.rotation.y;
+            const startRight = windowPanes.right.rotation.y;
+            const duration = 500;
+            const startTime = Date.now();
+
+            function animateWindow() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3); // ease out cubic
+
+                windowPanes.left.rotation.y = startLeft + (targetAngle - startLeft) * eased;
+                windowPanes.right.rotation.y = startRight + (-targetAngle - startRight) * eased;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateWindow);
+                } else {
+                    windowAnimating = false;
+                    // Cat notices the window!
+                    if (windowOpen && (state === 'IDLE' || state === 'WALK')) {
+                        // Cat might go look at window
+                        if (Math.random() < 0.5) {
+                            setState('WALK', 'window');
+                            targetPos.set(-13, 0, 0);
+                            stateTimer = 8;
+                        }
+                    }
+                }
+            }
+            animateWindow();
+        }
+
+        // Sky background visible through window (FrontSide so invisible from outside)
         const skyPlane = new THREE.Mesh(
             new THREE.PlaneGeometry(6, 5),
             new THREE.MeshBasicMaterial({
                 color: 0x87ceeb,
-                side: THREE.DoubleSide
+                side: THREE.FrontSide
             })
         );
         skyPlane.position.set(-15.5, 5, 0);
         skyPlane.rotation.y = Math.PI / 2;
         scene.add(skyPlane);
 
-        // Clouds outside window
-        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+        // Clouds outside window (FrontSide so invisible from outside)
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.FrontSide });
         const clouds = [];
         for (let i = 0; i < 3; i++) {
             const cloudGroup = new THREE.Group();
@@ -1740,7 +1796,8 @@
             water: new THREE.Vector3(-5.8, 0, 4),
             scratchPost: new THREE.Vector3(6, 0, -4),
             sunbeam: new THREE.Vector3(5, 0, 2),
-            center: new THREE.Vector3(0, 0, 0)
+            center: new THREE.Vector3(0, 0, 0),
+            window: new THREE.Vector3(-13, 0, 0)
         };
 
         const stateEmojis = {
@@ -1760,7 +1817,8 @@
             'SUNBATHE': '☀️ Sunbathing',
             'ZOOMIES': '⚡ ZOOMIES!',
             'ROLLOVER': '🙃 Rolling Over',
-            'CURIOUS': '🔍 Curious'
+            'CURIOUS': '🔍 Curious',
+            'WINDOW_WATCH': '🪟 Watching Birds'
         };
 
         function setState(newState, goal = null) {
@@ -1824,8 +1882,8 @@
                 return;
             }
 
-            if (stats.hunger < 25) {
-                // Hungry - go eat
+            if (stats.hunger < 40) {
+                // Hungry - go eat (increased threshold for more proactive eating)
                 setState('WALK', 'food');
                 targetPos.copy(locations.food);
                 stateTimer = 15;
@@ -1849,9 +1907,18 @@
                 return;
             }
 
-            if (stats.hunger < 50 && rand < 0.25) {
+            if (stats.hunger < 70 && rand < 0.4) {
+                // Getting a bit hungry - might go eat (increased probability)
                 setState('WALK', 'food');
                 targetPos.copy(locations.food);
+                stateTimer = 10;
+                return;
+            }
+
+            // Window watching - cats love looking at birds!
+            if (windowOpen && rand < 0.15) {
+                setState('WALK', 'window');
+                targetPos.copy(locations.window);
                 stateTimer = 10;
                 return;
             }
@@ -1968,7 +2035,14 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
-            // First check if clicking on a toy to drag it
+            // First check if clicking on window to open/close it
+            const windowIntersects = raycaster.intersectObjects([windowPanes.left, windowPanes.right], false);
+            if (windowIntersects.length > 0) {
+                toggleWindow();
+                return;
+            }
+
+            // Check if clicking on a toy to drag it
             const toyMeshes = toys.map(t => t.mesh);
             const toyIntersects = raycaster.intersectObjects(toyMeshes, true);
             if (toyIntersects.length > 0) {
@@ -2388,7 +2462,7 @@
             // Slowly decrease stats
             stats.happiness = Math.max(0, stats.happiness - dt * 0.5);
             stats.energy = Math.max(0, stats.energy - dt * 0.3);
-            stats.hunger = Math.max(0, stats.hunger - dt * 0.4);
+            stats.hunger = Math.max(0, stats.hunger - dt * 1.2);
 
             if (Math.floor(time) % 5 === 0) updateStatsUI();
 
@@ -2507,6 +2581,9 @@
                     } else if (currentGoal === 'scratch') {
                         setState('SCRATCH');
                         stateTimer = 3 + Math.random() * 2;
+                    } else if (currentGoal === 'window') {
+                        setState('WINDOW_WATCH');
+                        stateTimer = 4 + Math.random() * 4;
                     } else {
                         setState('IDLE');
                         stateTimer = 0.5 + Math.random() * 1.5;
@@ -3018,6 +3095,72 @@
                     legFL.shoulder.rotation.z = 0;
                     legFR.shoulder.rotation.z = 0;
                     updateStatsUI();
+                }
+            }
+            else if (state === 'WINDOW_WATCH') {
+                // Watching birds out the window
+                stateTimer -= dt;
+
+                // Face the window (west wall)
+                const targetRotation = -Math.PI / 2;
+                let rotDiff = targetRotation - kittenGroup.rotation.y;
+                while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                kittenGroup.rotation.y += rotDiff * 3 * dt;
+
+                // Sitting pose, looking up at birds
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.2, 3 * dt);
+
+                // Head follows birds (if any exist)
+                if (birds.length > 0) {
+                    const birdToWatch = birds[Math.floor(time) % birds.length];
+                    if (birdToWatch && birdToWatch.mesh) {
+                        const birdPos = birdToWatch.mesh.position.clone();
+                        const headPos = kittenGroup.position.clone();
+                        headPos.y += 1.5;
+                        const toBird = birdPos.sub(headPos).normalize();
+
+                        // Head tilts to follow bird
+                        headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, toBird.x * 0.5, 2 * dt);
+                        headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, -toBird.y * 0.3, 2 * dt);
+                    }
+                } else {
+                    // Just look up at the window
+                    headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, -0.2, 2 * dt);
+                }
+
+                // Sit pose for legs
+                const sitPose = getSitPose();
+                legs.forEach(leg => {
+                    if (leg.isFront) {
+                        setLegTarget(leg, sitPose.front);
+                    } else {
+                        setLegTarget(leg, sitPose.back);
+                    }
+                    updateLegPose(leg, dt, 4);
+                });
+
+                // Tail twitches with excitement
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 4 + i * 0.5) * (0.1 + i * 0.05);
+                    seg.rotation.x = -0.05;
+                });
+
+                // Occasionally chirp at birds
+                if (Math.random() < 0.01) {
+                    // Mouth opens for chirp
+                    mouthGroup.scale.y = 1.3;
+                }
+                mouthGroup.scale.y = THREE.MathUtils.lerp(mouthGroup.scale.y, 1, 5 * dt);
+
+                // Slight happiness from enrichment
+                stats.happiness = Math.min(100, stats.happiness + dt * 0.5);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    headGroup.rotation.y = 0;
+                    headGroup.rotation.x = 0;
                 }
             }
             else if (state === 'ZOOMIES') {
