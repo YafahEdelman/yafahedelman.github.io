@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v2.0.0</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v2.0.1</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -3286,17 +3286,20 @@
                 }
             }
             else if (state === 'EAT') {
-                stateTimer -= dt;
-
                 // Head down bobbing
                 headGroup.position.y = 1.5 + Math.sin(time * 8) * 0.05;
                 headGroup.rotation.x = 0.4;
 
-                if (stateTimer <= 0) {
+                // Gradually fill up while eating
+                stats.hunger = Math.min(100, stats.hunger + dt * 15);
+                updateStatsUI();
+
+                // Keep eating until full (or nearly full)
+                if (stats.hunger >= 95) {
                     setState('IDLE');
                     stateTimer = 2;
                     headGroup.rotation.x = 0;
-                    stats.hunger = Math.min(100, stats.hunger + 30);
+                    stats.hunger = 100;
                     updateStatsUI();
                 }
             }
