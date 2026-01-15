@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D Kitten Simulator - AI Designed Tiny Games</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { touch-action: none; display: block; }
         #ui-layer {
             position: absolute;
             top: 10px;
@@ -95,6 +96,107 @@
             color: #666;
             z-index: 10;
             max-width: 200px;
+        }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            #ui-layer h1 {
+                font-size: 1rem;
+                padding: 6px 12px;
+            }
+            #ui-layer .mt-2 a {
+                font-size: 0.7rem;
+                padding: 4px 8px;
+            }
+            #stats-panel {
+                top: auto;
+                bottom: 90px;
+                left: 5px;
+                padding: 8px 10px;
+                min-width: 120px;
+                font-size: 10px;
+            }
+            #stats-panel > div:first-child {
+                font-size: 12px !important;
+                margin-bottom: 5px !important;
+            }
+            .stat-bar {
+                height: 8px;
+                margin: 2px 0 6px 0;
+            }
+            #state-indicator {
+                top: 5px;
+                right: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            #tools-panel {
+                bottom: 10px;
+                gap: 6px;
+            }
+            .tool-btn {
+                width: 46px;
+                height: 46px;
+                font-size: 18px;
+                border-width: 2px;
+            }
+            #instructions {
+                display: none;
+            }
+        }
+
+        /* Extra small phones */
+        @media (max-width: 400px) {
+            #ui-layer h1 {
+                font-size: 0.85rem;
+                padding: 4px 10px;
+            }
+            #stats-panel {
+                min-width: 100px;
+                padding: 6px 8px;
+            }
+            .tool-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+        }
+
+        /* Landscape mode on mobile */
+        @media (max-height: 500px) {
+            #ui-layer {
+                top: 5px;
+            }
+            #ui-layer h1 {
+                font-size: 0.9rem;
+                padding: 4px 10px;
+            }
+            #ui-layer .mt-2 {
+                margin-top: 2px !important;
+            }
+            #stats-panel {
+                top: 5px;
+                bottom: auto;
+                left: 5px;
+                padding: 6px 8px;
+                min-width: 100px;
+            }
+            #state-indicator {
+                top: 5px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+            #tools-panel {
+                bottom: 5px;
+            }
+            .tool-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            #instructions {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -1644,10 +1746,36 @@
             cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.01, 6, 25);
         }
 
+        // Pinch-to-zoom support for mobile
+        let lastPinchDistance = 0;
+        function getTouchDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches.length === 2) {
+                lastPinchDistance = getTouchDistance(event.touches);
+            }
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                const currentDistance = getTouchDistance(event.touches);
+                const delta = lastPinchDistance - currentDistance;
+                cameraDistance = THREE.MathUtils.clamp(cameraDistance + delta * 0.05, 6, 25);
+                lastPinchDistance = currentDistance;
+            }
+        }
+
         window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
         window.addEventListener('wheel', onWheel);
+        window.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
 
         // --- ANIMATION ---
         const clock = new THREE.Clock();
