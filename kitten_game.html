@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.4.0</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.4.1</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -360,6 +360,15 @@
         windowFrame.position.set(-14.8, 5, 0);
         windowFrame.rotation.y = Math.PI / 2;
         scene.add(windowFrame);
+
+        // Exterior blocker - hides window/sky/clouds when viewed from outside
+        const exteriorBlocker = new THREE.Mesh(
+            new THREE.PlaneGeometry(6, 5),
+            new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.FrontSide })
+        );
+        exteriorBlocker.position.set(-15.1, 5, 0);
+        exteriorBlocker.rotation.y = -Math.PI / 2; // Faces outward (visible from outside only)
+        scene.add(exteriorBlocker);
 
         // Window state
         let windowOpen = false;
