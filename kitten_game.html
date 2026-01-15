@@ -218,6 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.4.0</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -403,20 +404,20 @@
             animateWindow();
         }
 
-        // Sky background visible through window (FrontSide so invisible from outside)
+        // Sky background visible through window (BackSide faces into room)
         const skyPlane = new THREE.Mesh(
             new THREE.PlaneGeometry(6, 5),
             new THREE.MeshBasicMaterial({
                 color: 0x87ceeb,
-                side: THREE.FrontSide
+                side: THREE.BackSide
             })
         );
         skyPlane.position.set(-15.5, 5, 0);
         skyPlane.rotation.y = Math.PI / 2;
         scene.add(skyPlane);
 
-        // Clouds outside window (FrontSide so invisible from outside)
-        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.FrontSide });
+        // Clouds outside window (BackSide so visible from inside room)
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.BackSide });
         const clouds = [];
         for (let i = 0; i < 3; i++) {
             const cloudGroup = new THREE.Group();
