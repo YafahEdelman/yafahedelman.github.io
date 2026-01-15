@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.0</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.1</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -361,15 +361,6 @@
         windowFrame.rotation.y = Math.PI / 2;
         scene.add(windowFrame);
 
-        // Exterior blocker - hides window/sky/clouds when viewed from outside
-        const exteriorBlocker = new THREE.Mesh(
-            new THREE.PlaneGeometry(6, 5),
-            new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.FrontSide })
-        );
-        exteriorBlocker.position.set(-15.1, 5, 0);
-        exteriorBlocker.rotation.y = -Math.PI / 2; // Faces outward (visible from outside only)
-        scene.add(exteriorBlocker);
-
         // Window state
         let windowOpen = false;
         const windowPanes = { left: windowGlassLeft, right: windowGlassRight };
@@ -381,9 +372,11 @@
             windowAnimating = true;
             windowOpen = !windowOpen;
 
-            const targetAngle = windowOpen ? Math.PI * 0.4 : 0;
-            const startLeft = windowPanes.left.rotation.y;
-            const startRight = windowPanes.right.rotation.y;
+            // Fade out glass when opening, fade in when closing
+            const targetOpacity = windowOpen ? 0.1 : 0.4;
+            const startOpacityLeft = windowPanes.left.material.opacity;
+            const startOpacityRight = windowPanes.right.material.opacity;
+
             const duration = 500;
             const startTime = Date.now();
 
@@ -392,8 +385,10 @@
                 const progress = Math.min(elapsed / duration, 1);
                 const eased = 1 - Math.pow(1 - progress, 3); // ease out cubic
 
-                windowPanes.left.rotation.y = startLeft + (targetAngle - startLeft) * eased;
-                windowPanes.right.rotation.y = startRight + (-targetAngle - startRight) * eased;
+                // Fade out/in the glass
+                const newOpacity = startOpacityLeft + (targetOpacity - startOpacityLeft) * eased;
+                windowPanes.left.material.opacity = newOpacity;
+                windowPanes.right.material.opacity = newOpacity;
 
                 if (progress < 1) {
                     requestAnimationFrame(animateWindow);
@@ -413,20 +408,20 @@
             animateWindow();
         }
 
-        // Sky background visible through window (BackSide faces into room)
+        // Sky background visible through window
         const skyPlane = new THREE.Mesh(
             new THREE.PlaneGeometry(6, 5),
             new THREE.MeshBasicMaterial({
                 color: 0x87ceeb,
-                side: THREE.BackSide
+                side: THREE.FrontSide
             })
         );
         skyPlane.position.set(-15.5, 5, 0);
-        skyPlane.rotation.y = Math.PI / 2;
+        skyPlane.rotation.y = -Math.PI / 2; // Normal faces into room (+X direction)
         scene.add(skyPlane);
 
-        // Clouds outside window (BackSide so visible from inside room)
-        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.BackSide });
+        // Clouds outside window
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
         const clouds = [];
         for (let i = 0; i < 3; i++) {
             const cloudGroup = new THREE.Group();
