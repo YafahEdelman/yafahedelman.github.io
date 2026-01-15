@@ -307,8 +307,8 @@
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // Walls
-        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.DoubleSide });
+        // Walls - only visible from inside the room (FrontSide)
+        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.FrontSide });
         const backWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), wallMaterial);
         backWall.position.set(0, 7.5, -15);
         backWall.receiveShadow = true;
@@ -1301,6 +1301,8 @@
         // Tail - fluffy and expressive
         const tailGroup = new THREE.Group();
         tailGroup.position.set(0, 1.1, -0.6);
+        // Point tail outward/upward by default so it doesn't clip into body
+        tailGroup.rotation.x = -0.4;
         kittenGroup.add(tailGroup);
 
         const tailSegments = [];
@@ -2274,10 +2276,10 @@
                 // Slow breathing
                 bodyGroup.scale.set(1, 1 + Math.sin(time * 1.2) * 0.03, 1);
 
-                // Relax tail
+                // Relax tail - curl it around body but keep pointing outward
                 tailSegments.forEach((seg, i) => {
-                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.1, 2 * dt);
-                    seg.rotation.x = THREE.MathUtils.lerp(seg.rotation.x, 0.1, 2 * dt);
+                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.15 + i * 0.05, 2 * dt);
+                    seg.rotation.x = THREE.MathUtils.lerp(seg.rotation.x, -0.15, 2 * dt);
                 });
 
                 // Spawn Zzz
@@ -2653,9 +2655,9 @@
                         leftEar.rotation.z = -0.1;
                         rightEar.rotation.z = 0.1;
 
-                        // Tail low and twitching
+                        // Tail low and twitching - keep straight back, not curving inward
                         tailSegments.forEach((seg, i) => {
-                            seg.rotation.x = 0.3;
+                            seg.rotation.x = -0.05;
                             seg.rotation.z = Math.sin(time * 20 + i) * 0.15;
                         });
                     }
@@ -2872,10 +2874,10 @@
                     updateLegPose(leg, dt, 20);
                 });
 
-                // Wild tail
+                // Wild tail - keep pointing outward even during crazy movement
                 tailSegments.forEach((seg, i) => {
                     seg.rotation.z = Math.sin(time * 15 + i) * 0.6;
-                    seg.rotation.x = -0.2 + Math.cos(time * 12 + i) * 0.3;
+                    seg.rotation.x = -0.35 + Math.cos(time * 12 + i) * 0.15;
                 });
 
                 // Wide eyes during zoomies
