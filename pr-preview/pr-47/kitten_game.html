@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D Kitten Simulator - AI Designed Tiny Games</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         canvas { touch-action: none; display: block; }
@@ -251,7 +251,8 @@
         camera.position.set(0, 8, 14);
         camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
