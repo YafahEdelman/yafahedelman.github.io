@@ -1,0 +1,2736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Kitten Simulator - AI Designed Tiny Games</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { touch-action: none; display: block; }
+        #ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #stats-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 10;
+            min-width: 180px;
+        }
+        .stat-bar {
+            height: 12px;
+            background: #e5e7eb;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 4px 0 10px 0;
+        }
+        .stat-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.3s ease;
+        }
+        #tools-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        .tool-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        .tool-btn:hover { transform: scale(1.1); }
+        .tool-btn.active { border-color: #fbbf24; box-shadow: 0 0 20px rgba(251, 191, 36, 0.6); }
+        #state-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        #kitten-name {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: #666;
+            z-index: 10;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #666;
+            z-index: 10;
+            max-width: 200px;
+        }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            #ui-layer h1 {
+                font-size: 1rem;
+                padding: 6px 12px;
+            }
+            #ui-layer .mt-2 a {
+                font-size: 0.7rem;
+                padding: 4px 8px;
+            }
+            #stats-panel {
+                top: auto;
+                bottom: 90px;
+                left: 5px;
+                padding: 8px 10px;
+                min-width: 120px;
+                font-size: 10px;
+            }
+            #stats-panel > div:first-child {
+                font-size: 12px !important;
+                margin-bottom: 5px !important;
+            }
+            .stat-bar {
+                height: 8px;
+                margin: 2px 0 6px 0;
+            }
+            #state-indicator {
+                top: 5px;
+                right: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            #tools-panel {
+                bottom: 10px;
+                gap: 6px;
+            }
+            .tool-btn {
+                width: 46px;
+                height: 46px;
+                font-size: 18px;
+                border-width: 2px;
+            }
+            #instructions {
+                display: none;
+            }
+        }
+
+        /* Extra small phones */
+        @media (max-width: 400px) {
+            #ui-layer h1 {
+                font-size: 0.85rem;
+                padding: 4px 10px;
+            }
+            #stats-panel {
+                min-width: 100px;
+                padding: 6px 8px;
+            }
+            .tool-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+        }
+
+        /* Landscape mode on mobile */
+        @media (max-height: 500px) {
+            #ui-layer {
+                top: 5px;
+            }
+            #ui-layer h1 {
+                font-size: 0.9rem;
+                padding: 4px 10px;
+            }
+            #ui-layer .mt-2 {
+                margin-top: 2px !important;
+            }
+            #stats-panel {
+                top: 5px;
+                bottom: auto;
+                left: 5px;
+                padding: 6px 8px;
+                min-width: 100px;
+            }
+            #state-indicator {
+                top: 5px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+            #tools-panel {
+                bottom: 5px;
+            }
+            .tool-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            #instructions {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-layer">
+        <h1 class="text-2xl font-bold text-gray-800 drop-shadow-md bg-white/80 px-4 py-2 rounded-full inline-block">🐱 Tiny 3D Kitten Simulator</h1>
+        <div class="mt-2">
+            <a href="games.html" class="pointer-events-auto text-indigo-600 hover:text-indigo-800 font-bold bg-white/90 px-3 py-1 rounded-lg shadow-sm border border-indigo-100 transition-colors text-sm">
+                &larr; Back to Games
+            </a>
+        </div>
+    </div>
+
+    <div id="stats-panel">
+        <div style="font-weight: bold; margin-bottom: 10px; font-size: 16px;">🐱 Whiskers</div>
+        <div style="font-size: 12px; color: #666;">Happiness</div>
+        <div class="stat-bar"><div id="happiness-bar" class="stat-fill" style="width: 80%; background: linear-gradient(90deg, #f472b6, #ec4899);"></div></div>
+        <div style="font-size: 12px; color: #666;">Energy</div>
+        <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
+        <div style="font-size: 12px; color: #666;">Hunger</div>
+        <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
+    </div>
+
+    <div id="state-indicator">😺 Idle</div>
+
+    <div id="tools-panel">
+        <button class="tool-btn active" id="pet-tool" style="background: linear-gradient(135deg, #fda4af, #fb7185);" title="Pet">✋</button>
+        <button class="tool-btn" id="laser-tool" style="background: linear-gradient(135deg, #f87171, #ef4444);" title="Laser Pointer">🔴</button>
+        <button class="tool-btn" id="treat-tool" style="background: linear-gradient(135deg, #a78bfa, #8b5cf6);" title="Give Treat">🍖</button>
+        <button class="tool-btn" id="yarn-tool" style="background: linear-gradient(135deg, #60a5fa, #3b82f6);" title="Throw Yarn">🧶</button>
+        <button class="tool-btn" id="catnip-tool" style="background: linear-gradient(135deg, #4ade80, #22c55e);" title="Catnip">🌿</button>
+    </div>
+
+    <div id="instructions">
+        <strong>Controls:</strong><br>
+        • Click kitten to pet<br>
+        • Drag to orbit camera<br>
+        • Scroll to zoom<br>
+        • Use tools below!
+    </div>
+
+    <script>
+        // ============================================
+        // ENHANCED 3D KITTEN SIMULATOR
+        // ============================================
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xfff8f0);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 8, 14);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        document.body.appendChild(renderer.domElement);
+
+        // --- CAMERA CONTROLS ---
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let cameraAngle = 0;
+        let cameraHeight = 8;
+        let cameraDistance = 14;
+
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xfff5e6, 0.5);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        mainLight.position.set(8, 15, 8);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 50;
+        mainLight.shadow.camera.left = -20;
+        mainLight.shadow.camera.right = 20;
+        mainLight.shadow.camera.top = 20;
+        mainLight.shadow.camera.bottom = -20;
+        mainLight.shadow.bias = -0.0001;
+        scene.add(mainLight);
+
+        // Warm fill light
+        const fillLight = new THREE.DirectionalLight(0xffeedd, 0.3);
+        fillLight.position.set(-5, 5, -5);
+        scene.add(fillLight);
+
+        // Sunbeam spotlight
+        const sunbeamLight = new THREE.SpotLight(0xfffacd, 0.8, 20, Math.PI / 6, 0.5);
+        sunbeamLight.position.set(6, 12, 2);
+        sunbeamLight.target.position.set(5, 0, 2);
+        sunbeamLight.castShadow = true;
+        scene.add(sunbeamLight);
+        scene.add(sunbeamLight.target);
+
+        // --- ENVIRONMENT ---
+        // Floor - wooden texture look
+        const floorGeometry = new THREE.PlaneGeometry(30, 30);
+        const floorMaterial = new THREE.MeshLambertMaterial({ color: 0xdeb887 });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Walls
+        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.DoubleSide });
+        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), wallMaterial);
+        backWall.position.set(0, 7.5, -15);
+        backWall.receiveShadow = true;
+        scene.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), wallMaterial);
+        leftWall.position.set(-15, 7.5, 0);
+        leftWall.rotation.y = Math.PI / 2;
+        scene.add(leftWall);
+
+        // Window
+        const windowFrame = new THREE.Group();
+        const frameMat = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
+        const frameTop = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 0.3), frameMat);
+        frameTop.position.set(0, 2, 0);
+        windowFrame.add(frameTop);
+        const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 0.3), frameMat);
+        frameBottom.position.set(0, -2, 0);
+        windowFrame.add(frameBottom);
+        const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4, 0.3), frameMat);
+        frameLeft.position.set(-2.35, 0, 0);
+        windowFrame.add(frameLeft);
+        const frameRight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4, 0.3), frameMat);
+        frameRight.position.set(2.35, 0, 0);
+        windowFrame.add(frameRight);
+        const frameMiddle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 0.2), frameMat);
+        windowFrame.add(frameMiddle);
+
+        const windowGlass = new THREE.Mesh(
+            new THREE.PlaneGeometry(4.4, 3.7),
+            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4 })
+        );
+        windowGlass.position.z = -0.1;
+        windowFrame.add(windowGlass);
+        windowFrame.position.set(-14.8, 5, 0);
+        windowFrame.rotation.y = Math.PI / 2;
+        scene.add(windowFrame);
+
+        // Sky background visible through window
+        const skyPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(6, 5),
+            new THREE.MeshBasicMaterial({
+                color: 0x87ceeb,
+                side: THREE.DoubleSide
+            })
+        );
+        skyPlane.position.set(-15.5, 5, 0);
+        skyPlane.rotation.y = Math.PI / 2;
+        scene.add(skyPlane);
+
+        // Clouds outside window
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+        const clouds = [];
+        for (let i = 0; i < 3; i++) {
+            const cloudGroup = new THREE.Group();
+            for (let j = 0; j < 4; j++) {
+                const puff = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3 + Math.random() * 0.2, 8, 8),
+                    cloudMat
+                );
+                puff.position.set(j * 0.3, Math.random() * 0.2, Math.random() * 0.2);
+                cloudGroup.add(puff);
+            }
+            cloudGroup.position.set(-15.8, 6 + i * 0.8, -2 + i * 2);
+            cloudGroup.rotation.y = Math.PI / 2;
+            scene.add(cloudGroup);
+            clouds.push({ mesh: cloudGroup, speed: 0.1 + Math.random() * 0.1 });
+        }
+
+        // Birds outside window (silhouettes that fly by)
+        const birds = [];
+        const birdMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+
+        function createBird() {
+            const birdGroup = new THREE.Group();
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 8, 8),
+                birdMat
+            );
+            body.scale.set(1, 0.7, 1.5);
+            birdGroup.add(body);
+
+            // Wings
+            const wingGeo = new THREE.PlaneGeometry(0.25, 0.1);
+            const leftWing = new THREE.Mesh(wingGeo, birdMat);
+            leftWing.position.set(0.12, 0.02, 0);
+            leftWing.rotation.z = 0.3;
+            birdGroup.add(leftWing);
+
+            const rightWing = new THREE.Mesh(wingGeo, birdMat);
+            rightWing.position.set(-0.12, 0.02, 0);
+            rightWing.rotation.z = -0.3;
+            birdGroup.add(rightWing);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.04, 6, 6),
+                birdMat
+            );
+            head.position.set(0, 0.02, 0.1);
+            birdGroup.add(head);
+
+            birdGroup.position.set(-15.6, 5.5 + Math.random() * 1.5, 5);
+            birdGroup.rotation.y = Math.PI / 2;
+            scene.add(birdGroup);
+
+            return {
+                mesh: birdGroup,
+                leftWing: leftWing,
+                rightWing: rightWing,
+                speed: 1.5 + Math.random(),
+                flapSpeed: 8 + Math.random() * 4,
+                startZ: 5
+            };
+        }
+
+        // Spawn initial birds
+        for (let i = 0; i < 2; i++) {
+            birds.push(createBird());
+            birds[i].mesh.position.z = -3 + i * 3;
+        }
+
+        // Dust motes floating in sunbeam
+        const dustMotes = [];
+        const dustMat = new THREE.MeshBasicMaterial({ color: 0xffffee, transparent: true, opacity: 0.6 });
+
+        for (let i = 0; i < 30; i++) {
+            const dust = new THREE.Mesh(
+                new THREE.SphereGeometry(0.02 + Math.random() * 0.02, 4, 4),
+                dustMat
+            );
+            dust.position.set(
+                5 + (Math.random() - 0.5) * 3,
+                1 + Math.random() * 4,
+                2 + (Math.random() - 0.5) * 3
+            );
+            scene.add(dust);
+            dustMotes.push({
+                mesh: dust,
+                baseY: dust.position.y,
+                driftX: Math.random() * 2 - 1,
+                driftZ: Math.random() * 2 - 1,
+                phase: Math.random() * Math.PI * 2,
+                speed: 0.2 + Math.random() * 0.3
+            });
+        }
+
+        // Cat Bed
+        const catBedGroup = new THREE.Group();
+        const bedBaseMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
+        const bedCushionMat = new THREE.MeshStandardMaterial({ color: 0xffe4e1, roughness: 0.95 });
+
+        const bedBase = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2, 0.5, 32), bedBaseMat);
+        bedBase.castShadow = true;
+        bedBase.receiveShadow = true;
+        catBedGroup.add(bedBase);
+
+        const bedCushion = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.4, 32), bedCushionMat);
+        bedCushion.position.y = 0.3;
+        bedCushion.castShadow = true;
+        catBedGroup.add(bedCushion);
+
+        const bedRim = new THREE.Mesh(new THREE.TorusGeometry(1.65, 0.25, 8, 32), bedCushionMat);
+        bedRim.rotation.x = Math.PI / 2;
+        bedRim.position.y = 0.5;
+        bedRim.castShadow = true;
+        catBedGroup.add(bedRim);
+
+        catBedGroup.position.set(-5, 0.25, -3);
+        scene.add(catBedGroup);
+
+        // Scratching Post
+        const scratchingPost = new THREE.Group();
+        const postMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 1.0 });
+        const platformMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8 });
+
+        const postBase = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.3, 32), platformMat);
+        postBase.castShadow = true;
+        postBase.receiveShadow = true;
+        scratchingPost.add(postBase);
+
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 4, 16), postMat);
+        post.position.y = 2.15;
+        post.castShadow = true;
+        scratchingPost.add(post);
+
+        const platform = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.25, 32), platformMat);
+        platform.position.y = 4.25;
+        platform.castShadow = true;
+        scratchingPost.add(platform);
+
+        // Dangling toy on scratching post
+        const danglingToy = new THREE.Mesh(
+            new THREE.SphereGeometry(0.15, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xff69b4 })
+        );
+        danglingToy.position.set(0.6, 3.5, 0);
+        danglingToy.castShadow = true;
+        scratchingPost.add(danglingToy);
+
+        scratchingPost.position.set(6, 0.15, -4);
+        scene.add(scratchingPost);
+
+        // Food and Water Bowls
+        const bowlGroup = new THREE.Group();
+        const bowlMat = new THREE.MeshStandardMaterial({ color: 0x4169e1, roughness: 0.3 });
+
+        const foodBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 0.25, 16), bowlMat);
+        foodBowl.castShadow = true;
+        bowlGroup.add(foodBowl);
+
+        const food = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.4, 0.35, 0.15, 16),
+            new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+        );
+        food.position.y = 0.1;
+        bowlGroup.add(food);
+
+        const waterBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 0.25, 16), bowlMat);
+        waterBowl.position.x = 1.2;
+        waterBowl.castShadow = true;
+        bowlGroup.add(waterBowl);
+
+        const water = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.4, 0.35, 0.12, 16),
+            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        );
+        water.position.set(1.2, 0.08, 0);
+        bowlGroup.add(water);
+
+        bowlGroup.position.set(-7, 0.125, 4);
+        scene.add(bowlGroup);
+
+        // Sunbeam area marker (subtle circle on floor)
+        const sunbeamArea = new THREE.Mesh(
+            new THREE.CircleGeometry(2, 32),
+            new THREE.MeshBasicMaterial({ color: 0xfffacd, transparent: true, opacity: 0.3 })
+        );
+        sunbeamArea.rotation.x = -Math.PI / 2;
+        sunbeamArea.position.set(5, 0.01, 2);
+        scene.add(sunbeamArea);
+
+        // Rug
+        const rug = new THREE.Mesh(
+            new THREE.CircleGeometry(4, 32),
+            new THREE.MeshLambertMaterial({ color: 0xb22222 })
+        );
+        rug.rotation.x = -Math.PI / 2;
+        rug.position.set(0, 0.01, 0);
+        rug.receiveShadow = true;
+        scene.add(rug);
+
+        // --- KITTEN MODEL ---
+        // Adorable kitten with big head, big eyes, fluffy features
+        const kittenGroup = new THREE.Group();
+        scene.add(kittenGroup);
+
+        // Materials with softer, cuter colors
+        const furColor = 0xffb366; // Warm orange tabby
+        const stripeColor = 0xdd8844;
+        const bellyColor = 0xfff5ee; // Cream white
+        const materialFur = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
+        const materialStripe = new THREE.MeshStandardMaterial({ color: stripeColor, roughness: 0.95 });
+        const materialWhite = new THREE.MeshStandardMaterial({ color: bellyColor, roughness: 0.95 });
+        const materialPink = new THREE.MeshStandardMaterial({ color: 0xffccd5, roughness: 0.6 });
+        const materialEyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 });
+        const materialIris = new THREE.MeshStandardMaterial({ color: 0x44aa66, roughness: 0.2, metalness: 0.1 }); // Green eyes!
+        const materialPupil = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.0 });
+        const materialEyeHighlight = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const materialNose = new THREE.MeshStandardMaterial({ color: 0xffaabb, roughness: 0.3 });
+        const materialPawPad = new THREE.MeshStandardMaterial({ color: 0xffb5c5, roughness: 0.4 });
+        const materialEyelid = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
+
+        // Body - rounder and cuter
+        const bodyGroup = new THREE.Group();
+        const bodyGeo = new THREE.SphereGeometry(0.7, 32, 32);
+        bodyGeo.scale(1, 0.9, 1.2);
+        const body = new THREE.Mesh(bodyGeo, materialFur);
+        body.castShadow = true;
+        bodyGroup.add(body);
+
+        // Fluffy chest tuft
+        const chestFluff = new THREE.Mesh(
+            new THREE.SphereGeometry(0.4, 16, 16),
+            materialWhite
+        );
+        chestFluff.position.set(0, 0.1, 0.5);
+        chestFluff.scale.set(0.9, 0.8, 0.5);
+        bodyGroup.add(chestFluff);
+
+        // Body stripes (more natural)
+        for (let i = 0; i < 5; i++) {
+            const stripe = new THREE.Mesh(
+                new THREE.CapsuleGeometry(0.03, 0.35, 4, 8),
+                materialStripe
+            );
+            stripe.position.set(0.62 + Math.sin(i * 0.5) * 0.05, 0.15 - i * 0.08, -0.2 + i * 0.18);
+            stripe.rotation.z = 0.4 + i * 0.1;
+            stripe.rotation.x = -0.2;
+            bodyGroup.add(stripe);
+        }
+
+        bodyGroup.position.y = 1.0;
+        kittenGroup.add(bodyGroup);
+
+        // === HEAD - Much bigger for cute proportions ===
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 1.75, 0.9);
+        kittenGroup.add(headGroup);
+
+        // Main head - bigger and rounder
+        const headGeo = new THREE.SphereGeometry(0.75, 32, 32);
+        const head = new THREE.Mesh(headGeo, materialFur);
+        head.scale.set(1, 0.95, 0.9);
+        head.castShadow = true;
+        headGroup.add(head);
+
+        // Forehead fluff
+        const foreheadFluff = new THREE.Mesh(
+            new THREE.SphereGeometry(0.25, 16, 16),
+            materialFur
+        );
+        foreheadFluff.position.set(0, 0.45, 0.4);
+        foreheadFluff.scale.set(1.5, 0.6, 0.5);
+        headGroup.add(foreheadFluff);
+
+        // Cheek fluffs - rounder and puffier
+        const cheekGeo = new THREE.SphereGeometry(0.28, 16, 16);
+        const leftCheek = new THREE.Mesh(cheekGeo, materialWhite);
+        leftCheek.position.set(0.4, -0.1, 0.45);
+        leftCheek.scale.set(0.9, 0.8, 0.6);
+        headGroup.add(leftCheek);
+
+        const rightCheek = new THREE.Mesh(cheekGeo, materialWhite);
+        rightCheek.position.set(-0.4, -0.1, 0.45);
+        rightCheek.scale.set(0.9, 0.8, 0.6);
+        headGroup.add(rightCheek);
+
+        // Muzzle
+        const muzzle = new THREE.Mesh(
+            new THREE.SphereGeometry(0.2, 16, 16),
+            materialWhite
+        );
+        muzzle.position.set(0, -0.15, 0.6);
+        muzzle.scale.set(1, 0.7, 0.8);
+        headGroup.add(muzzle);
+
+        // === EARS - Bigger and fluffier ===
+        const earGeo = new THREE.ConeGeometry(0.22, 0.45, 16);
+        const earInnerGeo = new THREE.ConeGeometry(0.13, 0.32, 16);
+        const earFluffGeo = new THREE.SphereGeometry(0.12, 8, 8);
+
+        const leftEar = new THREE.Mesh(earGeo, materialFur);
+        leftEar.position.set(0.38, 0.55, 0.0);
+        leftEar.rotation.x = -0.1;
+        leftEar.rotation.z = -0.25;
+        leftEar.castShadow = true;
+        headGroup.add(leftEar);
+
+        const leftEarInner = new THREE.Mesh(earInnerGeo, materialPink);
+        leftEarInner.position.set(0.38, 0.52, 0.06);
+        leftEarInner.rotation.x = -0.1;
+        leftEarInner.rotation.z = -0.25;
+        headGroup.add(leftEarInner);
+
+        // Ear tufts (fluffy inside)
+        const leftEarTuft = new THREE.Mesh(earFluffGeo, materialWhite);
+        leftEarTuft.position.set(0.38, 0.35, 0.08);
+        leftEarTuft.scale.set(0.8, 1.2, 0.5);
+        headGroup.add(leftEarTuft);
+
+        const rightEar = new THREE.Mesh(earGeo, materialFur);
+        rightEar.position.set(-0.38, 0.55, 0.0);
+        rightEar.rotation.x = -0.1;
+        rightEar.rotation.z = 0.25;
+        rightEar.castShadow = true;
+        headGroup.add(rightEar);
+
+        const rightEarInner = new THREE.Mesh(earInnerGeo, materialPink);
+        rightEarInner.position.set(-0.38, 0.52, 0.06);
+        rightEarInner.rotation.x = -0.1;
+        rightEarInner.rotation.z = 0.25;
+        headGroup.add(rightEarInner);
+
+        const rightEarTuft = new THREE.Mesh(earFluffGeo, materialWhite);
+        rightEarTuft.position.set(-0.38, 0.35, 0.08);
+        rightEarTuft.scale.set(0.8, 1.2, 0.5);
+        headGroup.add(rightEarTuft);
+
+        // === EYES - Much bigger and more expressive ===
+        const eyeGroup = new THREE.Group();
+
+        // Left eye socket (slight indent)
+        const leftEyeSocket = new THREE.Group();
+        leftEyeSocket.position.set(0.26, 0.1, 0.5);
+        eyeGroup.add(leftEyeSocket);
+
+        const leftEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
+        leftEyeWhite.scale.z = 0.4;
+        leftEyeSocket.add(leftEyeWhite);
+
+        // Iris (colored part) - bigger and more visible
+        const leftIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
+        leftIris.position.z = 0.04;
+        leftIris.scale.z = 0.3;
+        leftEyeSocket.add(leftIris);
+
+        // Pupil - vertical slit that can dilate
+        const leftPupilGroup = new THREE.Group();
+        leftPupilGroup.position.z = 0.06;
+        leftEyeSocket.add(leftPupilGroup);
+
+        const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
+        leftPupil.scale.set(0.5, 1, 0.2);
+        leftPupilGroup.add(leftPupil);
+
+        // Eye highlights (two for that cute anime look)
+        const leftHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
+        leftHighlight1.position.set(0.05, 0.06, 0.07);
+        leftEyeSocket.add(leftHighlight1);
+
+        const leftHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
+        leftHighlight2.position.set(-0.03, -0.04, 0.07);
+        leftEyeSocket.add(leftHighlight2);
+
+        // Eyelid for blinking
+        const leftEyelid = new THREE.Mesh(
+            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+            materialEyelid
+        );
+        leftEyelid.rotation.x = Math.PI;
+        leftEyelid.position.z = 0.01;
+        leftEyelid.scale.z = 0.5;
+        leftEyelid.visible = false;
+        leftEyeSocket.add(leftEyelid);
+
+        // Right eye (mirror of left)
+        const rightEyeSocket = new THREE.Group();
+        rightEyeSocket.position.set(-0.26, 0.1, 0.5);
+        eyeGroup.add(rightEyeSocket);
+
+        const rightEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
+        rightEyeWhite.scale.z = 0.4;
+        rightEyeSocket.add(rightEyeWhite);
+
+        const rightIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
+        rightIris.position.z = 0.04;
+        rightIris.scale.z = 0.3;
+        rightEyeSocket.add(rightIris);
+
+        const rightPupilGroup = new THREE.Group();
+        rightPupilGroup.position.z = 0.06;
+        rightEyeSocket.add(rightPupilGroup);
+
+        const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
+        rightPupil.scale.set(0.5, 1, 0.2);
+        rightPupilGroup.add(rightPupil);
+
+        const rightHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
+        rightHighlight1.position.set(0.05, 0.06, 0.07);
+        rightEyeSocket.add(rightHighlight1);
+
+        const rightHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
+        rightHighlight2.position.set(-0.03, -0.04, 0.07);
+        rightEyeSocket.add(rightHighlight2);
+
+        const rightEyelid = new THREE.Mesh(
+            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+            materialEyelid
+        );
+        rightEyelid.rotation.x = Math.PI;
+        rightEyelid.position.z = 0.01;
+        rightEyelid.scale.z = 0.5;
+        rightEyelid.visible = false;
+        rightEyeSocket.add(rightEyelid);
+
+        headGroup.add(eyeGroup);
+
+        // Eye state for blinking and expressions
+        let blinkTimer = 0;
+        let isBlinking = false;
+        let blinkProgress = 0;
+        let pupilDilation = 1.0; // 1.0 = normal, 0.5 = dilated (excited), 1.5 = slits (bright/alert)
+
+        // === NOSE - Cute pink triangle ===
+        const noseGeo = new THREE.SphereGeometry(0.08, 12, 12);
+        const nose = new THREE.Mesh(noseGeo, materialNose);
+        nose.position.set(0, -0.12, 0.68);
+        nose.scale.set(1.0, 0.7, 0.5);
+        headGroup.add(nose);
+
+        // Nose shine
+        const noseShine = new THREE.Mesh(
+            new THREE.SphereGeometry(0.02, 8, 8),
+            materialEyeHighlight
+        );
+        noseShine.position.set(0.02, -0.10, 0.71);
+        headGroup.add(noseShine);
+
+        // === MOUTH - Cute cat smile ===
+        const mouthGroup = new THREE.Group();
+        mouthGroup.position.set(0, -0.2, 0.62);
+
+        // Create a cute W-shaped mouth using curves
+        const mouthMat = new THREE.LineBasicMaterial({ color: 0x444444, linewidth: 2 });
+
+        // Center vertical line from nose
+        const noseLine = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0.06, 0),
+                new THREE.Vector3(0, 0, 0)
+            ]),
+            mouthMat
+        );
+        mouthGroup.add(noseLine);
+
+        // Left curve
+        const leftMouthCurve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0.06, -0.04, 0),
+            new THREE.Vector3(0.12, 0, 0)
+        );
+        const leftMouth = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(leftMouthCurve.getPoints(10)),
+            mouthMat
+        );
+        mouthGroup.add(leftMouth);
+
+        // Right curve
+        const rightMouthCurve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(-0.06, -0.04, 0),
+            new THREE.Vector3(-0.12, 0, 0)
+        );
+        const rightMouth = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(rightMouthCurve.getPoints(10)),
+            mouthMat
+        );
+        mouthGroup.add(rightMouth);
+
+        headGroup.add(mouthGroup);
+
+        // Tongue (hidden, shown when meowing/yawning)
+        const tongue = new THREE.Mesh(
+            new THREE.SphereGeometry(0.06, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xff6b8a })
+        );
+        tongue.position.set(0, -0.22, 0.6);
+        tongue.scale.set(1.2, 0.5, 1);
+        tongue.visible = false;
+        headGroup.add(tongue);
+
+        // === WHISKERS - Longer and more visible ===
+        const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
+        const whiskers = [];
+
+        function createWhisker(x, y, z, angleY, angleZ, length = 0.6) {
+            const whiskerGeo = new THREE.CylinderGeometry(0.008, 0.003, length, 4);
+            whiskerGeo.rotateX(Math.PI / 2);
+            const whisker = new THREE.Mesh(whiskerGeo, whiskerMat);
+            whisker.position.set(x, y, z);
+            whisker.rotation.y = angleY;
+            whisker.rotation.z = angleZ;
+            headGroup.add(whisker);
+            whiskers.push(whisker);
+            return whisker;
+        }
+
+        // Left whiskers (3 per side, longer)
+        createWhisker(0.28, -0.08, 0.55, 0.35, 0.2, 0.7);
+        createWhisker(0.28, -0.13, 0.55, 0.3, 0, 0.75);
+        createWhisker(0.28, -0.18, 0.55, 0.35, -0.15, 0.65);
+
+        // Right whiskers
+        createWhisker(-0.28, -0.08, 0.55, -0.35, -0.2, 0.7);
+        createWhisker(-0.28, -0.13, 0.55, -0.3, 0, 0.75);
+        createWhisker(-0.28, -0.18, 0.55, -0.35, 0.15, 0.65);
+
+        // Eyebrow whiskers (shorter)
+        createWhisker(0.35, 0.25, 0.45, 0.5, 0.4, 0.25);
+        createWhisker(-0.35, 0.25, 0.45, -0.5, -0.4, 0.25);
+
+        // Forehead M pattern (tabby marking)
+        const mPatternGroup = new THREE.Group();
+        const stripeMat = materialStripe;
+
+        // M shape stripes
+        const mStripe1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.15, 4, 8), stripeMat);
+        mStripe1.position.set(0.12, 0.4, 0.58);
+        mStripe1.rotation.z = -0.5;
+        mPatternGroup.add(mStripe1);
+
+        const mStripe2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.15, 4, 8), stripeMat);
+        mStripe2.position.set(-0.12, 0.4, 0.58);
+        mStripe2.rotation.z = 0.5;
+        mPatternGroup.add(mStripe2);
+
+        const mStripe3 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.12, 4, 8), stripeMat);
+        mStripe3.position.set(0.06, 0.35, 0.6);
+        mStripe3.rotation.z = 0.4;
+        mPatternGroup.add(mStripe3);
+
+        const mStripe4 = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.12, 4, 8), stripeMat);
+        mStripe4.position.set(-0.06, 0.35, 0.6);
+        mStripe4.rotation.z = -0.4;
+        mPatternGroup.add(mStripe4);
+
+        headGroup.add(mPatternGroup);
+
+        // === LEGS - Chubbier and cuter ===
+        const legs = [];
+        const upperLegGeo = new THREE.CapsuleGeometry(0.1, 0.3, 8, 12);
+        const lowerLegGeo = new THREE.CapsuleGeometry(0.09, 0.28, 8, 12);
+        const pawGeo = new THREE.SphereGeometry(0.13, 16, 16);
+        const pawPadGeo = new THREE.SphereGeometry(0.045, 8, 8);
+        const toeGeo = new THREE.SphereGeometry(0.025, 6, 6);
+
+        function createLeg(x, z, name) {
+            const hipJoint = new THREE.Group();
+            hipJoint.position.set(x, 0.85, z);
+
+            // Upper leg (thigh)
+            const upperLeg = new THREE.Mesh(upperLegGeo, materialFur);
+            upperLeg.position.y = -0.18;
+            upperLeg.castShadow = true;
+            hipJoint.add(upperLeg);
+
+            // Knee joint
+            const kneeJoint = new THREE.Group();
+            kneeJoint.position.y = -0.38;
+            hipJoint.add(kneeJoint);
+
+            // Lower leg
+            const lowerLeg = new THREE.Mesh(lowerLegGeo, materialFur);
+            lowerLeg.position.y = -0.18;
+            lowerLeg.castShadow = true;
+            kneeJoint.add(lowerLeg);
+
+            // Ankle joint
+            const ankleJoint = new THREE.Group();
+            ankleJoint.position.y = -0.38;
+            kneeJoint.add(ankleJoint);
+
+            // Paw - rounder and cuter
+            const paw = new THREE.Mesh(pawGeo, materialFur);
+            paw.scale.set(1.2, 0.5, 1.4);
+            paw.castShadow = true;
+            ankleJoint.add(paw);
+
+            // Main paw pad (big pink bean)
+            const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
+            mainPad.position.set(0, -0.04, 0.04);
+            mainPad.scale.set(1.8, 0.5, 1.4);
+            ankleJoint.add(mainPad);
+
+            // Toe beans! (4 little pink beans)
+            const toePositions = [
+                [-0.06, -0.04, 0.11],
+                [-0.02, -0.04, 0.13],
+                [0.02, -0.04, 0.13],
+                [0.06, -0.04, 0.11]
+            ];
+            toePositions.forEach(pos => {
+                const toe = new THREE.Mesh(toeGeo, materialPawPad);
+                toe.position.set(...pos);
+                toe.scale.set(1, 0.6, 1);
+                ankleJoint.add(toe);
+            });
+
+            kittenGroup.add(hipJoint);
+            legs.push({
+                mesh: hipJoint,
+                knee: kneeJoint,
+                ankle: ankleJoint,
+                name: name
+            });
+            return hipJoint;
+        }
+
+        const legFL = createLeg(0.32, 0.45, 'FL');
+        const legFR = createLeg(-0.32, 0.45, 'FR');
+        const legBL = createLeg(0.32, -0.45, 'BL');
+        const legBR = createLeg(-0.32, -0.45, 'BR');
+
+        // Tail - fluffy and expressive
+        const tailGroup = new THREE.Group();
+        tailGroup.position.set(0, 1.1, -0.6);
+        kittenGroup.add(tailGroup);
+
+        const tailSegments = [];
+        const numTailSegments = 8;
+        let prevSegment = tailGroup;
+
+        for (let i = 0; i < numTailSegments; i++) {
+            const segmentGroup = new THREE.Group();
+            // Tail gets thinner toward tip but stays fluffy
+            const radius = 0.12 - i * 0.01;
+            const fluffRadius = radius * 1.3;
+
+            // Inner core
+            const segment = new THREE.Mesh(
+                new THREE.CapsuleGeometry(radius * 0.7, 0.15, 4, 8),
+                i % 3 === 1 ? materialStripe : materialFur
+            );
+            segment.position.y = 0.1;
+            segment.castShadow = true;
+            segmentGroup.add(segment);
+
+            // Fluffy outer layer
+            const fluff = new THREE.Mesh(
+                new THREE.SphereGeometry(fluffRadius, 8, 8),
+                materialFur
+            );
+            fluff.position.y = 0.1;
+            fluff.scale.set(1, 1.2, 1);
+            segmentGroup.add(fluff);
+
+            segmentGroup.position.y = i === 0 ? 0 : 0.18;
+            segmentGroup.rotation.x = -0.2;
+
+            if (i === 0) {
+                tailGroup.add(segmentGroup);
+            } else {
+                prevSegment.add(segmentGroup);
+            }
+
+            tailSegments.push(segmentGroup);
+            prevSegment = segmentGroup;
+        }
+
+        // Fluffy tail tip
+        const tailTip = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08, 8, 8),
+            materialFur
+        );
+        tailTip.position.y = 0.15;
+        tailTip.scale.set(1.5, 1.8, 1.5);
+        prevSegment.add(tailTip);
+
+        // --- PARTICLES ---
+        const hearts = [];
+        const heartShape = new THREE.Shape();
+        heartShape.moveTo(0.25, 0.25);
+        heartShape.bezierCurveTo(0.25, 0.25, 0.20, 0, 0, 0);
+        heartShape.bezierCurveTo(-0.30, 0, -0.30, 0.35, -0.30, 0.35);
+        heartShape.bezierCurveTo(-0.30, 0.55, -0.10, 0.77, 0.25, 0.95);
+        heartShape.bezierCurveTo(0.60, 0.77, 0.80, 0.55, 0.80, 0.35);
+        heartShape.bezierCurveTo(0.80, 0.35, 0.80, 0, 0.50, 0);
+        heartShape.bezierCurveTo(0.35, 0, 0.25, 0.25, 0.25, 0.25);
+        const heartGeo = new THREE.ShapeGeometry(heartShape);
+
+        function spawnHeart() {
+            const heartMat = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(Math.random() * 0.1 + 0.9, 0.8, 0.6),
+                side: THREE.DoubleSide,
+                transparent: true
+            });
+            const heart = new THREE.Mesh(heartGeo, heartMat);
+            heart.scale.set(0.15, 0.15, 0.15);
+            const worldPos = new THREE.Vector3();
+            head.getWorldPosition(worldPos);
+            heart.position.copy(worldPos);
+            heart.position.y += 0.8 + Math.random() * 0.3;
+            heart.position.x += (Math.random() - 0.5) * 0.6;
+            heart.rotation.z = Math.PI;
+            scene.add(heart);
+            hearts.push({ mesh: heart, life: 1.5, speedY: 1.2 + Math.random() * 0.5, rotSpeed: (Math.random() - 0.5) * 2 });
+        }
+
+        // Zzz particles
+        const zzzs = [];
+        function createZzzTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 48px sans-serif';
+            ctx.fillStyle = '#a0c4ff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Z', 32, 32);
+            return new THREE.CanvasTexture(canvas);
+        }
+        const zzzTexture = createZzzTexture();
+        const zzzMaterial = new THREE.SpriteMaterial({ map: zzzTexture, transparent: true });
+
+        function spawnZzz() {
+            const zzz = new THREE.Sprite(zzzMaterial.clone());
+            zzz.scale.set(0.4, 0.4, 0.4);
+            const worldPos = new THREE.Vector3();
+            head.getWorldPosition(worldPos);
+            zzz.position.copy(worldPos);
+            zzz.position.y += 0.6;
+            zzz.position.x += 0.3;
+            scene.add(zzz);
+            zzzs.push({ mesh: zzz, life: 2.5, speedY: 0.6, swayOffset: Math.random() * 10, scale: 0.4 });
+        }
+
+        // Purr bubbles
+        const purrBubbles = [];
+        function spawnPurrBubble() {
+            const bubble = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0xffb6c1, transparent: true, opacity: 0.6 })
+            );
+            const worldPos = new THREE.Vector3();
+            body.getWorldPosition(worldPos);
+            bubble.position.copy(worldPos);
+            bubble.position.x += (Math.random() - 0.5) * 0.8;
+            bubble.position.z += (Math.random() - 0.5) * 0.8;
+            scene.add(bubble);
+            purrBubbles.push({ mesh: bubble, life: 1.0, speedY: 0.8 + Math.random() * 0.3 });
+        }
+
+        // Paw prints
+        const pawPrints = [];
+        function createPawPrintTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(150, 120, 90, 0.3)';
+            // Main pad
+            ctx.beginPath();
+            ctx.ellipse(32, 38, 12, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Toe beans
+            ctx.beginPath();
+            ctx.arc(20, 22, 6, 0, Math.PI * 2);
+            ctx.arc(32, 18, 6, 0, Math.PI * 2);
+            ctx.arc(44, 22, 6, 0, Math.PI * 2);
+            ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+        }
+        const pawPrintTexture = createPawPrintTexture();
+
+        function spawnPawPrint(x, z, rotation) {
+            const print = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.3, 0.3),
+                new THREE.MeshBasicMaterial({ map: pawPrintTexture, transparent: true, opacity: 0.5 })
+            );
+            print.rotation.x = -Math.PI / 2;
+            print.rotation.z = rotation;
+            print.position.set(x, 0.02, z);
+            scene.add(print);
+            pawPrints.push({ mesh: print, life: 8.0 });
+        }
+
+        // Meow indicator
+        const meowTexture = (() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 32px sans-serif';
+            ctx.fillStyle = '#ff69b4';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Meow!', 64, 32);
+            return new THREE.CanvasTexture(canvas);
+        })();
+
+        let meowSprite = null;
+        function showMeow() {
+            if (meowSprite) scene.remove(meowSprite);
+            meowSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: meowTexture, transparent: true }));
+            meowSprite.scale.set(1.5, 0.75, 1);
+            const worldPos = new THREE.Vector3();
+            head.getWorldPosition(worldPos);
+            meowSprite.position.copy(worldPos);
+            meowSprite.position.y += 1.2;
+            scene.add(meowSprite);
+            setTimeout(() => {
+                if (meowSprite) {
+                    scene.remove(meowSprite);
+                    meowSprite = null;
+                }
+            }, 1500);
+        }
+
+        // --- TOYS ---
+        const toys = [];
+        const toyMaterials = [
+            new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0x44ff44, roughness: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0x4444ff, roughness: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0xffff44, roughness: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0xff44ff, roughness: 0.3 }),
+        ];
+
+        function createToys() {
+            // Red ball
+            const ball = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), toyMaterials[0]);
+            ball.castShadow = true;
+            ball.position.set(3, 0.35, 2);
+            scene.add(ball);
+            toys.push({ mesh: ball, type: 'ball', radius: 0.35, velocity: new THREE.Vector3(), attractive: true });
+
+            // Yarn ball
+            const yarnBall = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), toyMaterials[4]);
+            yarnBall.castShadow = true;
+            yarnBall.position.set(-2, 0.3, 3);
+            scene.add(yarnBall);
+            toys.push({ mesh: yarnBall, type: 'ball', radius: 0.3, velocity: new THREE.Vector3(), attractive: true });
+
+            // Mouse toy
+            const mouseGroup = new THREE.Group();
+            const mouseBody = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 12, 12),
+                new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 })
+            );
+            mouseBody.scale.set(1, 0.8, 1.5);
+            mouseBody.castShadow = true;
+            mouseGroup.add(mouseBody);
+
+            const mouseEar1 = new THREE.Mesh(
+                new THREE.CircleGeometry(0.08, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffaaaa, side: THREE.DoubleSide })
+            );
+            mouseEar1.position.set(0.12, 0.12, 0.15);
+            mouseEar1.rotation.y = 0.5;
+            mouseGroup.add(mouseEar1);
+
+            const mouseEar2 = new THREE.Mesh(
+                new THREE.CircleGeometry(0.08, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffaaaa, side: THREE.DoubleSide })
+            );
+            mouseEar2.position.set(-0.12, 0.12, 0.15);
+            mouseEar2.rotation.y = -0.5;
+            mouseGroup.add(mouseEar2);
+
+            const mouseTail = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.01, 0.4, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffaaaa })
+            );
+            mouseTail.position.set(0, 0, -0.35);
+            mouseTail.rotation.x = Math.PI / 2.5;
+            mouseGroup.add(mouseTail);
+
+            mouseGroup.position.set(2, 0.16, -2);
+            scene.add(mouseGroup);
+            toys.push({ mesh: mouseGroup, type: 'mouse', radius: 0.25, velocity: new THREE.Vector3(), attractive: true });
+
+            // Crinkle ball
+            const crinkleBall = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(0.25, 0),
+                new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.2, metalness: 0.5 })
+            );
+            crinkleBall.castShadow = true;
+            crinkleBall.position.set(-3, 0.25, -1);
+            scene.add(crinkleBall);
+            toys.push({ mesh: crinkleBall, type: 'ball', radius: 0.25, velocity: new THREE.Vector3(), attractive: true });
+        }
+        createToys();
+
+        // Laser pointer dot
+        const laserDot = new THREE.Mesh(
+            new THREE.CircleGeometry(0.15, 16),
+            new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 })
+        );
+        laserDot.rotation.x = -Math.PI / 2;
+        laserDot.position.set(0, 0.02, 0);
+        laserDot.visible = false;
+        scene.add(laserDot);
+
+        // Special draggable yarn ball
+        const yarnGroup = new THREE.Group();
+        // Create yarn texture with wrapped lines
+        const yarnBallGeo = new THREE.SphereGeometry(0.35, 16, 16);
+        const yarnMat = new THREE.MeshStandardMaterial({ color: 0xff6699, roughness: 0.9 });
+        const mainYarn = new THREE.Mesh(yarnBallGeo, yarnMat);
+        mainYarn.castShadow = true;
+        yarnGroup.add(mainYarn);
+        // Add yarn strand wraps
+        for (let i = 0; i < 8; i++) {
+            const wrap = new THREE.Mesh(
+                new THREE.TorusGeometry(0.35, 0.03, 4, 16),
+                new THREE.MeshStandardMaterial({ color: 0xff4477 })
+            );
+            wrap.rotation.x = Math.random() * Math.PI;
+            wrap.rotation.y = Math.random() * Math.PI;
+            yarnGroup.add(wrap);
+        }
+        // Trailing yarn strand
+        const strandCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0, 0.35),
+            new THREE.Vector3(0.3, 0, 0.6),
+            new THREE.Vector3(0.2, 0, 1.0),
+            new THREE.Vector3(0.5, 0, 1.3)
+        ]);
+        const strandGeo = new THREE.TubeGeometry(strandCurve, 12, 0.02, 6, false);
+        const strand = new THREE.Mesh(strandGeo, new THREE.MeshStandardMaterial({ color: 0xff4477 }));
+        yarnGroup.add(strand);
+        yarnGroup.position.set(0, 0.35, 4);
+        scene.add(yarnGroup);
+
+        const specialYarn = { mesh: yarnGroup, type: 'yarn', radius: 0.35, velocity: new THREE.Vector3(), attractive: true, draggable: true };
+        toys.push(specialYarn);
+
+        // Dragging state
+        let draggedToy = null;
+        let dragOffset = new THREE.Vector3();
+
+        // Treat
+        function spawnTreat(x, z) {
+            const treat = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.1, 0.1, 0.05, 8),
+                new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+            );
+            treat.position.set(x, 0.025, z);
+            treat.castShadow = true;
+            scene.add(treat);
+            toys.push({ mesh: treat, type: 'treat', radius: 0.1, velocity: new THREE.Vector3(), attractive: true, consumable: true });
+            stats.hunger = Math.min(100, stats.hunger + 15);
+            updateStatsUI();
+        }
+
+        // --- STATS ---
+        const stats = {
+            happiness: 80,
+            energy: 70,
+            hunger: 60
+        };
+
+        function updateStatsUI() {
+            document.getElementById('happiness-bar').style.width = stats.happiness + '%';
+            document.getElementById('energy-bar').style.width = stats.energy + '%';
+            document.getElementById('hunger-bar').style.width = stats.hunger + '%';
+        }
+
+        // --- KITTEN AI ---
+        let state = 'IDLE';
+        let stateTimer = 0;
+        let targetPos = new THREE.Vector3();
+        let targetToy = null;
+        let currentGoal = null; // What the kitten is trying to do
+        const walkSpeed = 2.0;
+        const runSpeed = 4.5;
+        const turnSpeed = 4.0;
+        let currentSpeed = walkSpeed;
+        let pawPrintTimer = 0;
+
+        // Important locations
+        const locations = {
+            bed: new THREE.Vector3(-5, 0, -3),
+            food: new THREE.Vector3(-7, 0, 4),
+            water: new THREE.Vector3(-5.8, 0, 4),
+            scratchPost: new THREE.Vector3(6, 0, -4),
+            sunbeam: new THREE.Vector3(5, 0, 2),
+            center: new THREE.Vector3(0, 0, 0)
+        };
+
+        const stateEmojis = {
+            'IDLE': '😺 Idle',
+            'WALK': '🚶 Walking',
+            'SLEEP': '😴 Sleeping',
+            'PET': '😻 Being Petted',
+            'PLAY': '🎾 Playing',
+            'HUNT': '🐱 Hunting',
+            'GROOM': '🧼 Grooming',
+            'STRETCH': '🙆 Stretching',
+            'EAT': '🍽️ Eating',
+            'DRINK': '💧 Drinking',
+            'MEOW': '😺 Meowing',
+            'LASER': '🔴 Chasing Laser',
+            'SCRATCH': '🐾 Scratching',
+            'SUNBATHE': '☀️ Sunbathing',
+            'ZOOMIES': '⚡ ZOOMIES!',
+            'ROLLOVER': '🙃 Rolling Over',
+            'CURIOUS': '🔍 Curious'
+        };
+
+        function setState(newState, goal = null) {
+            state = newState;
+            currentGoal = goal;
+            document.getElementById('state-indicator').textContent = stateEmojis[newState] || newState;
+        }
+
+        function pickRandomPoint(maxDist = 6) {
+            const r = maxDist * Math.sqrt(Math.random());
+            const theta = Math.random() * 2 * Math.PI;
+            return new THREE.Vector3(r * Math.cos(theta), 0, r * Math.sin(theta));
+        }
+
+        function findNearestToy(maxDist = 15) {
+            let nearest = null;
+            let nearestDist = Infinity;
+            const kittenPos = kittenGroup.position;
+
+            for (const toy of toys) {
+                if (!toy.attractive) continue;
+                const dist = kittenPos.distanceTo(toy.mesh.position);
+                if (dist < nearestDist && dist < maxDist) {
+                    nearestDist = dist;
+                    nearest = toy;
+                }
+            }
+            return nearest;
+        }
+
+        function findInterestingToy() {
+            // Prefer moving toys or nearby toys
+            let best = null;
+            let bestScore = -Infinity;
+            const kittenPos = kittenGroup.position;
+
+            for (const toy of toys) {
+                if (!toy.attractive) continue;
+                const dist = kittenPos.distanceTo(toy.mesh.position);
+                const speed = toy.velocity.length();
+                // Score: closer is better, moving toys are more interesting
+                const score = (20 - dist) + speed * 10 + (toy.type === 'mouse' ? 5 : 0);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = toy;
+                }
+            }
+            return best;
+        }
+
+        function decideNextAction() {
+            // Kitten AI decision making based on needs and environment
+            const rand = Math.random();
+
+            // Urgent needs first
+            if (stats.energy < 20) {
+                // Very tired - go to bed
+                setState('WALK', 'bed');
+                targetPos.copy(locations.bed);
+                stateTimer = 15;
+                return;
+            }
+
+            if (stats.hunger < 25) {
+                // Hungry - go eat
+                setState('WALK', 'food');
+                targetPos.copy(locations.food);
+                stateTimer = 15;
+                return;
+            }
+
+            // Check for interesting toys
+            const interestingToy = findInterestingToy();
+
+            // Moderate needs
+            if (stats.energy < 50 && rand < 0.4) {
+                // Tired - might rest in sunbeam or bed
+                if (rand < 0.2) {
+                    setState('WALK', 'sunbeam');
+                    targetPos.copy(locations.sunbeam);
+                } else {
+                    setState('WALK', 'bed');
+                    targetPos.copy(locations.bed);
+                }
+                stateTimer = 10;
+                return;
+            }
+
+            if (stats.hunger < 50 && rand < 0.25) {
+                setState('WALK', 'food');
+                targetPos.copy(locations.food);
+                stateTimer = 10;
+                return;
+            }
+
+            // Fun activities based on energy level
+            if (stats.energy > 60) {
+                // ZOOMIES! Random sudden burst of energy (10% chance when high energy)
+                if (stats.energy > 80 && rand < 0.1) {
+                    setState('ZOOMIES');
+                    stateTimer = 4 + Math.random() * 3;
+                    return;
+                }
+
+                // Energetic - play with toys!
+                if (interestingToy && rand < 0.5) {
+                    targetToy = interestingToy;
+                    setState('HUNT', 'toy');
+                    stateTimer = 8;
+                    return;
+                }
+
+                if (rand < 0.15) {
+                    setState('WALK', 'scratch');
+                    targetPos.copy(locations.scratchPost);
+                    stateTimer = 8;
+                    return;
+                }
+
+                // Might roll over playfully
+                if (rand < 0.08) {
+                    setState('ROLLOVER');
+                    stateTimer = 3;
+                    return;
+                }
+            }
+
+            // Random behaviors
+            if (rand < 0.12) {
+                setState('GROOM');
+                stateTimer = 3 + Math.random() * 2;
+            } else if (rand < 0.2) {
+                setState('STRETCH');
+                stateTimer = 2;
+            } else if (rand < 0.26) {
+                setState('MEOW');
+                stateTimer = 1.5;
+                showMeow();
+            } else if (rand < 0.32) {
+                // Get curious about something
+                setState('CURIOUS');
+                targetPos = pickRandomPoint(5);
+                stateTimer = 4;
+            } else if (rand < 0.5 && interestingToy) {
+                targetToy = interestingToy;
+                setState('HUNT', 'toy');
+                stateTimer = 8;
+            } else if (rand < 0.7) {
+                // Wander to a specific location
+                const locs = ['sunbeam', 'center', 'scratchPost'];
+                const choice = locs[Math.floor(Math.random() * locs.length)];
+                setState('WALK', choice);
+                targetPos.copy(locations[choice]);
+                // Add some randomness around the target
+                targetPos.x += (Math.random() - 0.5) * 2;
+                targetPos.z += (Math.random() - 0.5) * 2;
+                stateTimer = 8;
+            } else {
+                // Random exploration
+                setState('WALK', 'explore');
+                targetPos = pickRandomPoint(8);
+                stateTimer = 5;
+            }
+        }
+
+        // --- TOOL STATE ---
+        let currentTool = 'pet';
+        let laserActive = false;
+
+        document.getElementById('pet-tool').addEventListener('click', () => selectTool('pet'));
+        document.getElementById('laser-tool').addEventListener('click', () => selectTool('laser'));
+        document.getElementById('treat-tool').addEventListener('click', () => selectTool('treat'));
+        document.getElementById('yarn-tool').addEventListener('click', () => selectTool('yarn'));
+        document.getElementById('catnip-tool').addEventListener('click', () => selectTool('catnip'));
+
+        function selectTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tool + '-tool').classList.add('active');
+
+            if (tool !== 'laser') {
+                laserDot.visible = false;
+                laserActive = false;
+            }
+        }
+
+        // --- INTERACTION ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+        function getFloorIntersection(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const target = new THREE.Vector3();
+            raycaster.ray.intersectPlane(floorPlane, target);
+            return target;
+        }
+
+        function onPointerDown(event) {
+            if (event.target.closest('#tools-panel') || event.target.closest('#stats-panel') || event.target.closest('#instructions')) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            // First check if clicking on a toy to drag it
+            const toyMeshes = toys.map(t => t.mesh);
+            const toyIntersects = raycaster.intersectObjects(toyMeshes, true);
+            if (toyIntersects.length > 0) {
+                // Find which toy was clicked
+                let clickedMesh = toyIntersects[0].object;
+                while (clickedMesh.parent && !toyMeshes.includes(clickedMesh)) {
+                    clickedMesh = clickedMesh.parent;
+                }
+                const clickedToy = toys.find(t => t.mesh === clickedMesh || t.mesh.children.includes(toyIntersects[0].object) || clickedMesh.parent === t.mesh);
+                if (clickedToy) {
+                    draggedToy = clickedToy;
+                    draggedToy.velocity.set(0, 0, 0);
+                    // Kitten notices!
+                    if (state === 'IDLE' || state === 'WALK') {
+                        targetToy = draggedToy;
+                        setState('HUNT', 'toy');
+                        stateTimer = 10;
+                    }
+                    return;
+                }
+            }
+
+            if (currentTool === 'pet') {
+                const intersects = raycaster.intersectObjects(kittenGroup.children, true);
+                if (intersects.length > 0) {
+                    setState('PET');
+                    stateTimer = 2.0;
+                    for (let i = 0; i < 5; i++) spawnHeart();
+                    stats.happiness = Math.min(100, stats.happiness + 10);
+                    updateStatsUI();
+                } else {
+                    // Camera drag
+                    isDragging = true;
+                }
+            } else if (currentTool === 'laser') {
+                laserActive = true;
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    laserDot.position.set(pos.x, 0.02, pos.z);
+                    laserDot.visible = true;
+                    if (state !== 'SLEEP') {
+                        setState('LASER');
+                        targetPos.copy(pos);
+                        currentSpeed = runSpeed;
+                    }
+                }
+            } else if (currentTool === 'treat') {
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    spawnTreat(pos.x, pos.z);
+                    if (state === 'IDLE' || state === 'WALK') {
+                        setState('WALK', 'food');
+                        targetPos.copy(pos);
+                        stateTimer = 10;
+                    }
+                }
+            } else if (currentTool === 'yarn') {
+                // Teleport the yarn ball to mouse position
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    specialYarn.mesh.position.set(pos.x, 0.35, pos.z);
+                    specialYarn.velocity.set(0, 0, 0);
+                    draggedToy = specialYarn;
+                    // Kitten notices the yarn!
+                    if (state !== 'SLEEP' && state !== 'PET') {
+                        targetToy = specialYarn;
+                        setState('HUNT', 'toy');
+                        stateTimer = 10;
+                    }
+                }
+            } else if (currentTool === 'catnip') {
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    // Catnip makes kitten hyperactive
+                    stats.energy = Math.min(100, stats.energy + 30);
+                    stats.happiness = Math.min(100, stats.happiness + 20);
+                    updateStatsUI();
+                    setState('PLAY');
+                    stateTimer = 5.0;
+                    currentSpeed = runSpeed;
+                    // Spawn some green particles
+                    for (let i = 0; i < 10; i++) {
+                        const leaf = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.05, 4, 4),
+                            new THREE.MeshBasicMaterial({ color: 0x22cc22, transparent: true })
+                        );
+                        leaf.position.set(pos.x + (Math.random() - 0.5), 0.5 + Math.random(), pos.z + (Math.random() - 0.5));
+                        scene.add(leaf);
+                        purrBubbles.push({ mesh: leaf, life: 2.0, speedY: -0.3 });
+                    }
+                }
+            }
+
+            previousMousePosition = { x: event.clientX, y: event.clientY };
+        }
+
+        function onPointerMove(event) {
+            const pos = getFloorIntersection(event);
+
+            // Handle toy dragging first
+            if (draggedToy && pos) {
+                const oldPos = draggedToy.mesh.position.clone();
+                draggedToy.mesh.position.set(
+                    THREE.MathUtils.clamp(pos.x, -12, 12),
+                    draggedToy.type === 'yarn' ? 0.35 : draggedToy.radius,
+                    THREE.MathUtils.clamp(pos.z, -12, 12)
+                );
+                // Calculate velocity for when released
+                draggedToy.velocity.set(
+                    (draggedToy.mesh.position.x - oldPos.x) * 20,
+                    0,
+                    (draggedToy.mesh.position.z - oldPos.z) * 20
+                );
+                // Keep kitten interested
+                if (targetToy === draggedToy && (state === 'HUNT' || state === 'PLAY')) {
+                    stateTimer = Math.max(stateTimer, 3);
+                }
+                return;
+            }
+
+            if (currentTool === 'laser' && laserActive) {
+                if (pos) {
+                    laserDot.position.set(
+                        THREE.MathUtils.clamp(pos.x, -12, 12),
+                        0.02,
+                        THREE.MathUtils.clamp(pos.z, -12, 12)
+                    );
+                    targetPos.copy(laserDot.position);
+                }
+            } else if (isDragging) {
+                const deltaX = event.clientX - previousMousePosition.x;
+                cameraAngle += deltaX * 0.01;
+                previousMousePosition = { x: event.clientX, y: event.clientY };
+            }
+        }
+
+        function onPointerUp() {
+            // Release dragged toy with momentum
+            if (draggedToy) {
+                // Toy keeps its velocity from dragging
+                draggedToy = null;
+            }
+
+            isDragging = false;
+            if (currentTool === 'laser') {
+                laserActive = false;
+                laserDot.visible = false;
+                if (state === 'LASER') {
+                    setState('IDLE');
+                    stateTimer = 1.0;
+                }
+            }
+        }
+
+        function onWheel(event) {
+            cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.01, 6, 25);
+        }
+
+        // Pinch-to-zoom support for mobile
+        let lastPinchDistance = 0;
+        function getTouchDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches.length === 2) {
+                lastPinchDistance = getTouchDistance(event.touches);
+            }
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                const currentDistance = getTouchDistance(event.touches);
+                const delta = lastPinchDistance - currentDistance;
+                cameraDistance = THREE.MathUtils.clamp(cameraDistance + delta * 0.05, 6, 25);
+                lastPinchDistance = currentDistance;
+            }
+        }
+
+        window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('wheel', onWheel);
+        window.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+
+        // --- ANIMATION ---
+        const clock = new THREE.Clock();
+        let lastPawPrint = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const time = clock.getElapsedTime();
+
+            // Update camera position
+            camera.position.x = Math.sin(cameraAngle) * cameraDistance;
+            camera.position.z = Math.cos(cameraAngle) * cameraDistance;
+            camera.position.y = cameraHeight;
+            camera.lookAt(0, 1, 0);
+
+            // Animate dangling toy
+            danglingToy.position.x = 0.6 + Math.sin(time * 2) * 0.15;
+            danglingToy.position.y = 3.5 + Math.sin(time * 3) * 0.1;
+
+            // === ENVIRONMENT ANIMATIONS ===
+            // Birds flying past window
+            birds.forEach((bird, index) => {
+                bird.mesh.position.z -= bird.speed * dt;
+
+                // Flap wings
+                const flapAngle = Math.sin(time * bird.flapSpeed) * 0.5;
+                bird.leftWing.rotation.z = 0.3 + flapAngle;
+                bird.rightWing.rotation.z = -0.3 - flapAngle;
+
+                // Bob up and down slightly
+                bird.mesh.position.y += Math.sin(time * 2 + index) * 0.002;
+
+                // Reset when off screen
+                if (bird.mesh.position.z < -5) {
+                    bird.mesh.position.z = 5;
+                    bird.mesh.position.y = 5.5 + Math.random() * 1.5;
+                    bird.speed = 1.5 + Math.random();
+
+                    // Kitten might notice birds!
+                    if (state === 'IDLE' && Math.random() < 0.3) {
+                        // Look at window
+                        headGroup.rotation.y = 0.8;
+                        leftEar.rotation.z = -0.1;
+                        rightEar.rotation.z = 0.1;
+                    }
+                }
+            });
+
+            // Clouds drifting
+            clouds.forEach(cloud => {
+                cloud.mesh.position.z -= cloud.speed * dt;
+                if (cloud.mesh.position.z < -4) {
+                    cloud.mesh.position.z = 4;
+                }
+            });
+
+            // Dust motes floating in sunbeam
+            dustMotes.forEach(dust => {
+                dust.mesh.position.y = dust.baseY + Math.sin(time * dust.speed + dust.phase) * 0.3;
+                dust.mesh.position.x += dust.driftX * dt * 0.05;
+                dust.mesh.position.z += dust.driftZ * dt * 0.05;
+
+                // Wrap around within sunbeam area
+                if (dust.mesh.position.x > 7) dust.mesh.position.x = 3;
+                if (dust.mesh.position.x < 3) dust.mesh.position.x = 7;
+                if (dust.mesh.position.z > 4) dust.mesh.position.z = 0;
+                if (dust.mesh.position.z < 0) dust.mesh.position.z = 4;
+            });
+
+            // === KITTEN BLINKING ===
+            blinkTimer -= dt;
+            if (blinkTimer <= 0 && !isBlinking) {
+                // Start a blink randomly every 2-6 seconds
+                isBlinking = true;
+                blinkProgress = 0;
+                blinkTimer = 2 + Math.random() * 4;
+            }
+
+            if (isBlinking) {
+                blinkProgress += dt * 8; // Blink speed
+                if (blinkProgress < 1) {
+                    // Closing
+                    const closeAmount = blinkProgress;
+                    leftEyelid.visible = true;
+                    rightEyelid.visible = true;
+                    leftEyelid.scale.y = closeAmount;
+                    rightEyelid.scale.y = closeAmount;
+                    leftEyeWhite.scale.y = 1 - closeAmount * 0.8;
+                    rightEyeWhite.scale.y = 1 - closeAmount * 0.8;
+                } else if (blinkProgress < 2) {
+                    // Opening
+                    const openAmount = blinkProgress - 1;
+                    leftEyelid.scale.y = 1 - openAmount;
+                    rightEyelid.scale.y = 1 - openAmount;
+                    leftEyeWhite.scale.y = 0.2 + openAmount * 0.8;
+                    rightEyeWhite.scale.y = 0.2 + openAmount * 0.8;
+                } else {
+                    // Done blinking
+                    isBlinking = false;
+                    leftEyelid.visible = false;
+                    rightEyelid.visible = false;
+                    leftEyeWhite.scale.y = 1;
+                    rightEyeWhite.scale.y = 1;
+                }
+            }
+
+            // Pupil dilation based on state/environment
+            let targetDilation = 1.0;
+            if (state === 'HUNT' || state === 'PLAY' || state === 'LASER') {
+                targetDilation = 1.8; // Dilated (excited)
+            } else if (state === 'SLEEP' || state === 'SUNBATHE') {
+                targetDilation = 0.6; // Relaxed slits
+            }
+            pupilDilation = THREE.MathUtils.lerp(pupilDilation, targetDilation, 2 * dt);
+            leftPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
+            rightPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
+
+            // Slowly decrease stats
+            stats.happiness = Math.max(0, stats.happiness - dt * 0.5);
+            stats.energy = Math.max(0, stats.energy - dt * 0.3);
+            stats.hunger = Math.max(0, stats.hunger - dt * 0.4);
+
+            if (Math.floor(time) % 5 === 0) updateStatsUI();
+
+            // --- STATE MACHINE ---
+            if (state === 'IDLE') {
+                stateTimer -= dt;
+
+                // Breathing
+                bodyGroup.scale.set(1, 1 + Math.sin(time * 2.5) * 0.02, 1);
+
+                // Tail sway
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 2 + i * 0.5) * 0.15;
+                });
+
+                // Ear twitch
+                if (Math.random() < 0.002) {
+                    leftEar.rotation.z = -0.2 + Math.random() * 0.2;
+                    setTimeout(() => leftEar.rotation.z = -0.2, 200);
+                }
+
+                // Whisker twitch
+                whiskers.forEach((w, i) => {
+                    w.rotation.z += Math.sin(time * 3 + i) * 0.002;
+                });
+
+                // Return to standing pose
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0, 3 * dt);
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0, 3 * dt);
+                headGroup.position.y = THREE.MathUtils.lerp(headGroup.position.y, 1.9, 3 * dt);
+                leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 1, 5 * dt);
+                rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 1, 5 * dt);
+
+                // Reset legs to standing pose
+                legs.forEach(leg => {
+                    leg.mesh.rotation.x = THREE.MathUtils.lerp(leg.mesh.rotation.x, 0, 5 * dt);
+                    leg.mesh.rotation.z = THREE.MathUtils.lerp(leg.mesh.rotation.z, 0, 5 * dt);
+                    leg.knee.rotation.x = THREE.MathUtils.lerp(leg.knee.rotation.x, 0, 5 * dt);
+                    leg.ankle.rotation.x = THREE.MathUtils.lerp(leg.ankle.rotation.x, 0, 5 * dt);
+                });
+
+                // Look at interesting things
+                const nearToy = findNearestToy(5);
+                if (nearToy) {
+                    const toyDir = nearToy.mesh.position.clone().sub(kittenGroup.position);
+                    const lookAngle = Math.atan2(toyDir.x, toyDir.z);
+                    headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, (lookAngle - kittenGroup.rotation.y) * 0.3, 3 * dt);
+                } else {
+                    headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, 0, 2 * dt);
+                }
+
+                if (stateTimer <= 0) {
+                    decideNextAction();
+                }
+            }
+            else if (state === 'SLEEP') {
+                stateTimer -= dt;
+
+                // Lower and curl
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.5, 2 * dt);
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0.25, 2 * dt);
+                headGroup.position.y = THREE.MathUtils.lerp(headGroup.position.y, 1.5, 2 * dt);
+                headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, 0.2, 2 * dt);
+
+                // Close eyes
+                leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 0.1, 8 * dt);
+                rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 0.1, 8 * dt);
+                leftEyeWhite.scale.y = THREE.MathUtils.lerp(leftEyeWhite.scale.y, 0.2, 8 * dt);
+                rightEyeWhite.scale.y = THREE.MathUtils.lerp(rightEyeWhite.scale.y, 0.2, 8 * dt);
+
+                // Slow breathing
+                bodyGroup.scale.set(1, 1 + Math.sin(time * 1.2) * 0.03, 1);
+
+                // Relax tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.1, 2 * dt);
+                    seg.rotation.x = THREE.MathUtils.lerp(seg.rotation.x, 0.1, 2 * dt);
+                });
+
+                // Spawn Zzz
+                if (Math.random() < 0.025) spawnZzz();
+
+                // Recover energy
+                stats.energy = Math.min(100, stats.energy + dt * 3);
+
+                if (stateTimer <= 0) {
+                    setState('STRETCH');
+                    stateTimer = 2;
+                    leftEyeWhite.scale.y = 1;
+                    rightEyeWhite.scale.y = 1;
+                    headGroup.rotation.x = 0;
+                }
+            }
+            else if (state === 'WALK' || state === 'LASER') {
+                const currentPos = kittenGroup.position.clone();
+                const direction = targetPos.clone().sub(currentPos);
+                direction.y = 0;
+                const dist = direction.length();
+
+                // Check if we've arrived at our goal
+                const arrivalDist = state === 'LASER' ? 0.3 : 0.8;
+                if (dist < arrivalDist) {
+                    currentSpeed = walkSpeed;
+
+                    // Do something based on what we came here for
+                    if (currentGoal === 'bed') {
+                        setState('SLEEP');
+                        stateTimer = 6 + Math.random() * 6;
+                    } else if (currentGoal === 'food') {
+                        setState('EAT');
+                        stateTimer = 3;
+                    } else if (currentGoal === 'water') {
+                        setState('DRINK');
+                        stateTimer = 2;
+                    } else if (currentGoal === 'sunbeam') {
+                        setState('SUNBATHE');
+                        stateTimer = 5 + Math.random() * 5;
+                    } else if (currentGoal === 'scratch') {
+                        setState('SCRATCH');
+                        stateTimer = 3 + Math.random() * 2;
+                    } else {
+                        setState('IDLE');
+                        stateTimer = 0.5 + Math.random() * 1.5;
+                    }
+                } else {
+                    direction.normalize();
+
+                    // Rotate towards target
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    let rotDiff = targetRotation - kittenGroup.rotation.y;
+                    while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                    while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                    kittenGroup.rotation.y += rotDiff * turnSpeed * dt;
+
+                    // Move
+                    const speed = state === 'LASER' ? runSpeed : currentSpeed;
+                    kittenGroup.position.add(direction.multiplyScalar(speed * dt));
+
+                    // Walk animation with articulated legs
+                    const legAmp = state === 'LASER' ? 0.5 : 0.35;
+                    const kneeAmp = state === 'LASER' ? 0.6 : 0.4;
+                    const legFreq = state === 'LASER' ? 15 : 10;
+
+                    // Front left, back right swing together
+                    const phase1 = Math.sin(time * legFreq);
+                    const phase2 = Math.cos(time * legFreq);
+
+                    legs[0].mesh.rotation.x = phase1 * legAmp;
+                    legs[0].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
+                    legs[1].mesh.rotation.x = phase2 * legAmp;
+                    legs[1].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
+                    legs[2].mesh.rotation.x = phase2 * legAmp;
+                    legs[2].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
+                    legs[3].mesh.rotation.x = phase1 * legAmp;
+                    legs[3].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
+
+                    // Head bob
+                    headGroup.position.y = 1.9 + Math.sin(time * legFreq * 2) * 0.04;
+
+                    // Tail animation
+                    tailSegments.forEach((seg, i) => {
+                        seg.rotation.z = Math.sin(time * 4 + i * 0.3) * 0.2;
+                    });
+
+                    // Paw prints
+                    pawPrintTimer += dt;
+                    if (pawPrintTimer > 0.4) {
+                        pawPrintTimer = 0;
+                        spawnPawPrint(
+                            kittenGroup.position.x + (Math.random() - 0.5) * 0.3,
+                            kittenGroup.position.z,
+                            kittenGroup.rotation.y
+                        );
+                    }
+
+                    // Check for distractions - nearby moving toys!
+                    if (state !== 'LASER' && currentGoal !== 'food' && currentGoal !== 'bed') {
+                        const movingToy = toys.find(t => t.velocity.length() > 1 &&
+                            kittenGroup.position.distanceTo(t.mesh.position) < 4);
+                        if (movingToy && Math.random() < 0.03) {
+                            targetToy = movingToy;
+                            setState('HUNT', 'toy');
+                            stateTimer = 5;
+                        }
+                    }
+
+                    stateTimer -= dt;
+                    if (stateTimer <= 0 && state !== 'LASER') {
+                        setState('IDLE');
+                        stateTimer = 1;
+                    }
+                }
+            }
+            else if (state === 'PET') {
+                stateTimer -= dt;
+
+                // Happy vibration
+                kittenGroup.position.y = Math.abs(Math.sin(time * 40) * 0.015);
+
+                // Squint eyes
+                leftPupil.scale.y = 0.3;
+                rightPupil.scale.y = 0.3;
+
+                // Happy tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 12 + i * 0.5) * 0.4;
+                });
+
+                // Purr bubbles
+                if (Math.random() < 0.08) spawnPurrBubble();
+                if (Math.random() < 0.03) spawnHeart();
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                }
+            }
+            else if (state === 'GROOM') {
+                stateTimer -= dt;
+
+                // Sit pose
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
+
+                // Bend back legs for sitting
+                legs[2].mesh.rotation.x = THREE.MathUtils.lerp(legs[2].mesh.rotation.x, -0.8, 3 * dt);
+                legs[2].knee.rotation.x = THREE.MathUtils.lerp(legs[2].knee.rotation.x, 1.2, 3 * dt);
+                legs[3].mesh.rotation.x = THREE.MathUtils.lerp(legs[3].mesh.rotation.x, -0.8, 3 * dt);
+                legs[3].knee.rotation.x = THREE.MathUtils.lerp(legs[3].knee.rotation.x, 1.2, 3 * dt);
+
+                // Lift front paw to face with bending
+                const groomLeg = legs[0];
+                groomLeg.mesh.rotation.x = THREE.MathUtils.lerp(groomLeg.mesh.rotation.x, -1.0, 5 * dt);
+                groomLeg.mesh.rotation.z = THREE.MathUtils.lerp(groomLeg.mesh.rotation.z, 0.3, 5 * dt);
+                groomLeg.knee.rotation.x = THREE.MathUtils.lerp(groomLeg.knee.rotation.x, 0.8, 5 * dt);
+
+                // Head licking motion
+                headGroup.rotation.z = Math.sin(time * 8) * 0.1;
+                headGroup.position.z = 1.1 + Math.sin(time * 8) * 0.05;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 1;
+                    headGroup.rotation.z = 0;
+                    headGroup.position.z = 1.1;
+                    stats.happiness = Math.min(100, stats.happiness + 5);
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'STRETCH') {
+                stateTimer -= dt;
+
+                const progress = 1 - (stateTimer / 2);
+
+                if (progress < 0.5) {
+                    // Front stretch - extend front legs forward
+                    const p = progress * 2;
+                    legs[0].mesh.rotation.x = -0.6 * p;
+                    legs[0].knee.rotation.x = -0.3 * p;
+                    legs[1].mesh.rotation.x = -0.6 * p;
+                    legs[1].knee.rotation.x = -0.3 * p;
+                    // Back legs stay planted, bend more
+                    legs[2].mesh.rotation.x = 0.2 * p;
+                    legs[2].knee.rotation.x = 0.4 * p;
+                    legs[3].mesh.rotation.x = 0.2 * p;
+                    legs[3].knee.rotation.x = 0.4 * p;
+                    kittenGroup.position.y = -0.2 * p;
+                    bodyGroup.scale.z = 1 + 0.15 * p;
+                } else {
+                    // Back arch - pull front legs in
+                    const p = (progress - 0.5) * 2;
+                    legs[0].mesh.rotation.x = -0.6 + 0.6 * p;
+                    legs[0].knee.rotation.x = -0.3 + 0.3 * p;
+                    legs[1].mesh.rotation.x = -0.6 + 0.6 * p;
+                    legs[1].knee.rotation.x = -0.3 + 0.3 * p;
+                    legs[2].mesh.rotation.x = 0.2 - 0.2 * p;
+                    legs[2].knee.rotation.x = 0.4 - 0.4 * p;
+                    legs[3].mesh.rotation.x = 0.2 - 0.2 * p;
+                    legs[3].knee.rotation.x = 0.4 - 0.4 * p;
+                    kittenGroup.position.y = -0.2 + 0.2 * p;
+                    bodyGroup.scale.z = 1.15 - 0.15 * p;
+                }
+
+                // Yawn
+                if (progress > 0.3 && progress < 0.7) {
+                    mouthGroup.scale.y = 1.5;
+                } else {
+                    mouthGroup.scale.y = 1;
+                }
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 1;
+                    bodyGroup.scale.z = 1;
+                    stats.energy = Math.min(100, stats.energy + 5);
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'MEOW') {
+                stateTimer -= dt;
+
+                // Head up
+                headGroup.rotation.x = -0.2 + Math.sin(time * 10) * 0.1;
+
+                // Mouth open
+                mouthGroup.scale.y = 1 + Math.abs(Math.sin(time * 8)) * 0.8;
+
+                // Ears back slightly
+                leftEar.rotation.z = -0.3;
+                rightEar.rotation.z = 0.3;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    headGroup.rotation.x = 0;
+                    mouthGroup.scale.y = 1;
+                    leftEar.rotation.z = -0.2;
+                    rightEar.rotation.z = 0.2;
+                }
+            }
+            else if (state === 'HUNT') {
+                stateTimer -= dt;
+
+                if (targetToy) {
+                    const currentPos = kittenGroup.position.clone();
+                    const toyPos = targetToy.mesh.position.clone();
+                    toyPos.y = 0;
+                    const direction = toyPos.sub(currentPos);
+                    const dist = direction.length();
+
+                    // Dynamic hunt speed based on distance and toy movement
+                    const toyMoving = targetToy.velocity.length() > 0.5;
+                    const huntSpeed = toyMoving ? 3.5 : (dist > 3 ? 2.5 : 1.2);
+
+                    if (dist < 0.7) {
+                        // Pounce!
+                        setState('PLAY');
+                        stateTimer = 2;
+                        const pounceDir = direction.normalize();
+                        targetToy.velocity.add(pounceDir.multiplyScalar(6));
+                        stats.happiness = Math.min(100, stats.happiness + 10);
+                        updateStatsUI();
+                        // Spawn some excitement particles
+                        for (let i = 0; i < 3; i++) spawnHeart();
+                    } else if (dist > 2 && toyMoving) {
+                        // Chase mode - run after moving toy!
+                        direction.normalize();
+
+                        const targetRotation = Math.atan2(direction.x, direction.z);
+                        let rotDiff = targetRotation - kittenGroup.rotation.y;
+                        while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                        while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                        kittenGroup.rotation.y += rotDiff * turnSpeed * 1.5 * dt;
+
+                        kittenGroup.position.add(direction.multiplyScalar(huntSpeed * dt));
+                        kittenGroup.position.y = Math.abs(Math.sin(time * 12) * 0.08);
+
+                        // Running leg animation with articulated joints
+                        legs.forEach((leg, i) => {
+                            const phase = Math.sin(time * 15 + i * Math.PI/2);
+                            leg.mesh.rotation.x = phase * 0.5;
+                            leg.knee.rotation.x = Math.max(0, -phase) * 0.7;
+                        });
+
+                        // Excited tail
+                        tailSegments.forEach((seg, i) => {
+                            seg.rotation.z = Math.sin(time * 10 + i) * 0.35;
+                        });
+                    } else {
+                        // Stalk mode - slow creep
+                        direction.normalize();
+
+                        // Crouch and stalk
+                        kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
+
+                        // Rotate towards prey
+                        const targetRotation = Math.atan2(direction.x, direction.z);
+                        let rotDiff = targetRotation - kittenGroup.rotation.y;
+                        while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                        while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                        kittenGroup.rotation.y += rotDiff * turnSpeed * dt;
+
+                        // Slow creep
+                        kittenGroup.position.add(direction.multiplyScalar(huntSpeed * dt));
+
+                        // Wiggle butt before pounce
+                        if (dist < 2) {
+                            kittenGroup.rotation.z = Math.sin(time * 20) * 0.08;
+                        }
+
+                        // Focused ears
+                        leftEar.rotation.z = -0.1;
+                        rightEar.rotation.z = 0.1;
+
+                        // Tail low and twitching
+                        tailSegments.forEach((seg, i) => {
+                            seg.rotation.x = 0.3;
+                            seg.rotation.z = Math.sin(time * 20 + i) * 0.15;
+                        });
+                    }
+                } else {
+                    // Lost target, find new one
+                    targetToy = findInterestingToy();
+                    if (!targetToy) {
+                        setState('IDLE');
+                        stateTimer = 1;
+                    }
+                }
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 1;
+                    kittenGroup.rotation.z = 0;
+                }
+            }
+            else if (state === 'PLAY') {
+                stateTimer -= dt;
+
+                // Energetic movements
+                kittenGroup.position.y = Math.abs(Math.sin(time * 8) * 0.1);
+
+                // Random direction changes
+                if (Math.random() < 0.02) {
+                    targetPos = pickRandomPoint(4);
+                }
+
+                const direction = targetPos.clone().sub(kittenGroup.position);
+                direction.y = 0;
+                if (direction.length() > 0.5) {
+                    direction.normalize();
+                    kittenGroup.position.add(direction.multiplyScalar(runSpeed * dt));
+
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    kittenGroup.rotation.y = THREE.MathUtils.lerp(kittenGroup.rotation.y, targetRotation, 8 * dt);
+                }
+
+                // Fast leg movement with knee articulation
+                legs.forEach((leg, i) => {
+                    const phase = Math.sin(time * 18 + i * Math.PI / 2);
+                    leg.mesh.rotation.x = phase * 0.6;
+                    leg.knee.rotation.x = Math.max(0, -phase) * 0.8;
+                });
+
+                // Excited tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 10 + i) * 0.5;
+                    seg.rotation.y = Math.cos(time * 8 + i) * 0.3;
+                });
+
+                stats.energy = Math.max(0, stats.energy - dt * 2);
+
+                if (stateTimer <= 0 || stats.energy < 10) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    currentSpeed = walkSpeed;
+                }
+            }
+            else if (state === 'EAT') {
+                stateTimer -= dt;
+
+                // Head down bobbing
+                headGroup.position.y = 1.5 + Math.sin(time * 8) * 0.05;
+                headGroup.rotation.x = 0.4;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    headGroup.rotation.x = 0;
+                    stats.hunger = Math.min(100, stats.hunger + 30);
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'DRINK') {
+                stateTimer -= dt;
+
+                // Head down, lapping motion
+                headGroup.position.y = 1.4 + Math.sin(time * 12) * 0.03;
+                headGroup.rotation.x = 0.5;
+
+                // Tongue lapping (mouth opens slightly)
+                mouthGroup.scale.y = 1 + Math.abs(Math.sin(time * 12)) * 0.3;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    headGroup.rotation.x = 0;
+                    mouthGroup.scale.y = 1;
+                    stats.happiness = Math.min(100, stats.happiness + 5);
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'SUNBATHE') {
+                stateTimer -= dt;
+
+                // Relaxed lying pose
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.4, 2 * dt);
+                kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0.3, 2 * dt);
+
+                // Squinty happy eyes
+                leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 0.3, 5 * dt);
+                rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 0.3, 5 * dt);
+
+                // Slow content breathing
+                bodyGroup.scale.set(1, 1 + Math.sin(time * 1.5) * 0.03, 1);
+
+                // Relaxed tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.05, 2 * dt);
+                });
+
+                // Recover energy and happiness
+                stats.energy = Math.min(100, stats.energy + dt * 2);
+                stats.happiness = Math.min(100, stats.happiness + dt * 1);
+
+                if (stateTimer <= 0) {
+                    setState('STRETCH');
+                    stateTimer = 2;
+                }
+            }
+            else if (state === 'SCRATCH') {
+                stateTimer -= dt;
+
+                // Stand up against post
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0.2, 5 * dt);
+
+                // Alternate front paws scratching with articulation
+                const scratch1 = Math.sin(time * 10);
+                const scratch2 = Math.cos(time * 10);
+
+                legs[0].mesh.rotation.x = -0.7 + scratch1 * 0.35;
+                legs[0].mesh.rotation.z = 0.2;
+                legs[0].knee.rotation.x = 0.3 + Math.abs(scratch1) * 0.2;
+
+                legs[1].mesh.rotation.x = -0.7 + scratch2 * 0.35;
+                legs[1].mesh.rotation.z = -0.2;
+                legs[1].knee.rotation.x = 0.3 + Math.abs(scratch2) * 0.2;
+
+                // Happy tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 6 + i * 0.5) * 0.3;
+                });
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 3);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'ZOOMIES') {
+                // ZOOMIES! Crazy random running around
+                stateTimer -= dt;
+
+                // Pick new random direction frequently
+                if (Math.random() < 0.05) {
+                    targetPos = pickRandomPoint(8);
+                }
+
+                const direction = targetPos.clone().sub(kittenGroup.position);
+                direction.y = 0;
+
+                if (direction.length() > 0.5) {
+                    direction.normalize();
+
+                    // Very fast rotation
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    let rotDiff = targetRotation - kittenGroup.rotation.y;
+                    while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                    while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                    kittenGroup.rotation.y += rotDiff * 10 * dt;
+
+                    // RUN FAST!
+                    kittenGroup.position.add(direction.multiplyScalar(6 * dt));
+                }
+
+                // Bouncy running
+                kittenGroup.position.y = Math.abs(Math.sin(time * 20) * 0.15);
+
+                // Crazy fast leg movement
+                legs.forEach((leg, i) => {
+                    const phase = Math.sin(time * 25 + i * Math.PI / 2);
+                    leg.mesh.rotation.x = phase * 0.7;
+                    leg.knee.rotation.x = Math.max(0, -phase) * 0.9;
+                });
+
+                // Wild tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 15 + i) * 0.6;
+                    seg.rotation.x = -0.2 + Math.cos(time * 12 + i) * 0.3;
+                });
+
+                // Wide eyes during zoomies
+                leftPupil.scale.set(0.8, 1.2, 0.2);
+                rightPupil.scale.set(0.8, 1.2, 0.2);
+
+                // Ears back
+                leftEar.rotation.z = -0.4;
+                rightEar.rotation.z = 0.4;
+
+                stats.energy = Math.max(0, stats.energy - dt * 4);
+
+                // Keep in bounds
+                kittenGroup.position.x = THREE.MathUtils.clamp(kittenGroup.position.x, -9, 9);
+                kittenGroup.position.z = THREE.MathUtils.clamp(kittenGroup.position.z, -9, 9);
+
+                if (stateTimer <= 0 || stats.energy < 20) {
+                    setState('IDLE');
+                    stateTimer = 3;
+                    leftEar.rotation.z = -0.25;
+                    rightEar.rotation.z = 0.25;
+                }
+            }
+            else if (state === 'ROLLOVER') {
+                // Rolling over for belly rubs
+                stateTimer -= dt;
+
+                const progress = 1 - (stateTimer / 3);
+
+                // Roll onto back
+                if (progress < 0.3) {
+                    kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, Math.PI * 0.9, 5 * dt);
+                    kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.4, 5 * dt);
+                } else if (progress < 0.7) {
+                    // Wiggle on back
+                    kittenGroup.rotation.z = Math.PI * 0.9 + Math.sin(time * 8) * 0.15;
+                    // Paws in air wiggling
+                    legs.forEach((leg, i) => {
+                        leg.mesh.rotation.x = -0.5 + Math.sin(time * 6 + i) * 0.3;
+                        leg.knee.rotation.x = 0.5 + Math.sin(time * 8 + i) * 0.2;
+                    });
+                    // Happy squinty eyes
+                    leftPupil.scale.y = 0.4;
+                    rightPupil.scale.y = 0.4;
+                } else {
+                    // Roll back over
+                    kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0, 5 * dt);
+                    kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0, 5 * dt);
+                }
+
+                // Tail swishing happily
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 6 + i * 0.5) * 0.4;
+                });
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 2);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    updateStatsUI();
+                }
+            }
+            else if (state === 'CURIOUS') {
+                // Investigating something curiously
+                stateTimer -= dt;
+
+                const direction = targetPos.clone().sub(kittenGroup.position);
+                direction.y = 0;
+                const dist = direction.length();
+
+                if (dist > 0.5) {
+                    // Slow cautious approach
+                    direction.normalize();
+                    kittenGroup.position.add(direction.multiplyScalar(1.2 * dt));
+
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    kittenGroup.rotation.y = THREE.MathUtils.lerp(kittenGroup.rotation.y, targetRotation, 3 * dt);
+                }
+
+                // Head tilted curiously
+                headGroup.rotation.z = Math.sin(time * 2) * 0.15;
+
+                // Ears perked forward
+                leftEar.rotation.x = -0.3;
+                rightEar.rotation.x = -0.3;
+                leftEar.rotation.z = -0.15;
+                rightEar.rotation.z = 0.15;
+
+                // Slight crouch
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.1, 3 * dt);
+
+                // Tail held high, tip twitching
+                tailSegments[0].rotation.x = -0.5;
+                tailSegments.forEach((seg, i) => {
+                    if (i > 4) {
+                        seg.rotation.z = Math.sin(time * 10) * 0.2;
+                    }
+                });
+
+                // Sniffing motion
+                nose.position.z = 0.68 + Math.sin(time * 8) * 0.02;
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 1.5;
+                    headGroup.rotation.z = 0;
+                    leftEar.rotation.x = -0.1;
+                    rightEar.rotation.x = -0.1;
+                    nose.position.z = 0.68;
+                }
+            }
+
+            // --- UPDATE PARTICLES ---
+            // Hearts
+            for (let i = hearts.length - 1; i >= 0; i--) {
+                const h = hearts[i];
+                h.life -= dt;
+                h.mesh.position.y += h.speedY * dt;
+                h.mesh.rotation.y += h.rotSpeed * dt;
+                h.mesh.material.opacity = Math.min(h.life, 1);
+                h.mesh.scale.setScalar(0.15 * (1 + (1 - h.life) * 0.5));
+
+                if (h.life <= 0) {
+                    scene.remove(h.mesh);
+                    hearts.splice(i, 1);
+                }
+            }
+
+            // Zzzs
+            for (let i = zzzs.length - 1; i >= 0; i--) {
+                const z = zzzs[i];
+                z.life -= dt;
+                z.mesh.position.y += z.speedY * dt;
+                z.mesh.position.x += Math.sin(time * 2 + z.swayOffset) * 0.015;
+                z.scale += dt * 0.1;
+                z.mesh.scale.setScalar(z.scale);
+                z.mesh.material.opacity = Math.min(z.life * 0.5, 0.7);
+
+                if (z.life <= 0) {
+                    scene.remove(z.mesh);
+                    zzzs.splice(i, 1);
+                }
+            }
+
+            // Purr bubbles
+            for (let i = purrBubbles.length - 1; i >= 0; i--) {
+                const b = purrBubbles[i];
+                b.life -= dt;
+                b.mesh.position.y += b.speedY * dt;
+                b.mesh.material.opacity = b.life * 0.6;
+
+                if (b.life <= 0) {
+                    scene.remove(b.mesh);
+                    purrBubbles.splice(i, 1);
+                }
+            }
+
+            // Paw prints
+            for (let i = pawPrints.length - 1; i >= 0; i--) {
+                const p = pawPrints[i];
+                p.life -= dt;
+                p.mesh.material.opacity = Math.min(p.life * 0.1, 0.3);
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    pawPrints.splice(i, 1);
+                }
+            }
+
+            // --- TOY PHYSICS ---
+            const kittenPos = kittenGroup.position.clone();
+            kittenPos.y = 0;
+
+            for (let i = toys.length - 1; i >= 0; i--) {
+                const toy = toys[i];
+
+                // Friction
+                toy.velocity.multiplyScalar(0.94);
+                toy.mesh.position.add(toy.velocity.clone().multiplyScalar(dt));
+
+                // Rotation for balls
+                if (toy.type === 'ball') {
+                    toy.mesh.rotation.x += toy.velocity.z * dt * 3;
+                    toy.mesh.rotation.z -= toy.velocity.x * dt * 3;
+                } else if (toy.type === 'mouse') {
+                    toy.mesh.rotation.y += toy.velocity.length() * dt;
+                }
+
+                // Kitten collision
+                const toyPos = toy.mesh.position.clone();
+                toyPos.y = 0;
+                const dist = kittenPos.distanceTo(toyPos);
+
+                if (dist < 0.8 + toy.radius) {
+                    if (toy.consumable) {
+                        // Eat the treat
+                        scene.remove(toy.mesh);
+                        toys.splice(i, 1);
+                        setState('EAT');
+                        stateTimer = 1;
+                        continue;
+                    }
+
+                    const pushDir = toyPos.sub(kittenPos).normalize();
+                    toy.velocity.add(pushDir.multiplyScalar(4 * dt));
+
+                    if (state === 'WALK' || state === 'PLAY' || state === 'HUNT') {
+                        toy.velocity.add(pushDir.multiplyScalar(3 * dt));
+                    }
+                }
+
+                // Bounds
+                const bounds = 12;
+                if (toy.mesh.position.x > bounds) { toy.mesh.position.x = bounds; toy.velocity.x *= -0.7; }
+                if (toy.mesh.position.x < -bounds) { toy.mesh.position.x = -bounds; toy.velocity.x *= -0.7; }
+                if (toy.mesh.position.z > bounds) { toy.mesh.position.z = bounds; toy.velocity.z *= -0.7; }
+                if (toy.mesh.position.z < -bounds) { toy.mesh.position.z = -bounds; toy.velocity.z *= -0.7; }
+            }
+
+            // Kitten bounds
+            kittenGroup.position.x = THREE.MathUtils.clamp(kittenGroup.position.x, -10, 10);
+            kittenGroup.position.z = THREE.MathUtils.clamp(kittenGroup.position.z, -10, 10);
+            if (kittenGroup.position.y < 0 && state !== 'SLEEP' && state !== 'HUNT' && state !== 'GROOM') {
+                kittenGroup.position.y = 0;
+            }
+
+            // Laser dot glow
+            if (laserDot.visible) {
+                laserDot.scale.setScalar(1 + Math.sin(time * 20) * 0.2);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
