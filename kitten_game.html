@@ -216,7 +216,7 @@
         <div class="stat-bar"><div id="happiness-bar" class="stat-fill" style="width: 80%; background: linear-gradient(90deg, #f472b6, #ec4899);"></div></div>
         <div style="font-size: 12px; color: #666;">Energy</div>
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
-        <div style="font-size: 12px; color: #666;">Hunger</div>
+        <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
     </div>
 
@@ -2462,7 +2462,7 @@
             // Slowly decrease stats
             stats.happiness = Math.max(0, stats.happiness - dt * 0.5);
             stats.energy = Math.max(0, stats.energy - dt * 0.3);
-            stats.hunger = Math.max(0, stats.hunger - dt * 1.2);
+            stats.hunger = Math.max(0, stats.hunger - dt * 0.4);
 
             if (Math.floor(time) % 5 === 0) updateStatsUI();
 
