@@ -1882,8 +1882,8 @@
                 return;
             }
 
-            if (stats.hunger < 40) {
-                // Hungry - go eat (increased threshold for more proactive eating)
+            if (stats.hunger < 25) {
+                // Hungry - go eat
                 setState('WALK', 'food');
                 targetPos.copy(locations.food);
                 stateTimer = 15;
@@ -1907,8 +1907,7 @@
                 return;
             }
 
-            if (stats.hunger < 70 && rand < 0.4) {
-                // Getting a bit hungry - might go eat (increased probability)
+            if (stats.hunger < 50 && rand < 0.25) {
                 setState('WALK', 'food');
                 targetPos.copy(locations.food);
                 stateTimer = 10;
