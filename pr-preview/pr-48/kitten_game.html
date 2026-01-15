@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.1</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.2</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -605,14 +605,23 @@
         bowlGroup.position.set(-7, 0.125, 4);
         scene.add(bowlGroup);
 
-        // Sunbeam area marker (subtle circle on floor)
+        // Sunbeam area marker (warm golden circle on floor)
         const sunbeamArea = new THREE.Mesh(
             new THREE.CircleGeometry(2, 32),
-            new THREE.MeshBasicMaterial({ color: 0xfffacd, transparent: true, opacity: 0.3 })
+            new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.4 })
         );
         sunbeamArea.rotation.x = -Math.PI / 2;
         sunbeamArea.position.set(5, 0.01, 2);
         scene.add(sunbeamArea);
+
+        // Brighter center spot
+        const sunbeamCenter = new THREE.Mesh(
+            new THREE.CircleGeometry(1, 32),
+            new THREE.MeshBasicMaterial({ color: 0xffec8b, transparent: true, opacity: 0.5 })
+        );
+        sunbeamCenter.rotation.x = -Math.PI / 2;
+        sunbeamCenter.position.set(5, 0.02, 2);
+        scene.add(sunbeamCenter);
 
         // Rug
         const rug = new THREE.Mesh(
