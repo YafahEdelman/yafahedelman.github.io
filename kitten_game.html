@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.2</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.3</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -315,10 +315,36 @@
         backWall.receiveShadow = true;
         scene.add(backWall);
 
-        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), wallMaterial);
-        leftWall.position.set(-15, 7.5, 0);
-        leftWall.rotation.y = Math.PI / 2;
-        scene.add(leftWall);
+        // Left wall with window hole - create segments around the window
+        // Window is at y=5, z=0, approximately 5 wide x 4 tall
+        const windowHoleZ = 0;
+        const windowHoleY = 5;
+        const windowWidth = 5;
+        const windowHeight = 4;
+
+        // Wall segment above window
+        const leftWallTop = new THREE.Mesh(new THREE.PlaneGeometry(30, 15 - (windowHoleY + windowHeight/2)), wallMaterial);
+        leftWallTop.position.set(-15, (15 + windowHoleY + windowHeight/2) / 2, 0);
+        leftWallTop.rotation.y = Math.PI / 2;
+        scene.add(leftWallTop);
+
+        // Wall segment below window
+        const leftWallBottom = new THREE.Mesh(new THREE.PlaneGeometry(30, windowHoleY - windowHeight/2), wallMaterial);
+        leftWallBottom.position.set(-15, (windowHoleY - windowHeight/2) / 2, 0);
+        leftWallBottom.rotation.y = Math.PI / 2;
+        scene.add(leftWallBottom);
+
+        // Wall segment left of window
+        const leftWallLeft = new THREE.Mesh(new THREE.PlaneGeometry(15 - windowWidth/2 - windowHoleZ, windowHeight), wallMaterial);
+        leftWallLeft.position.set(-15, windowHoleY, -(15 + windowWidth/2 + windowHoleZ) / 2);
+        leftWallLeft.rotation.y = Math.PI / 2;
+        scene.add(leftWallLeft);
+
+        // Wall segment right of window
+        const leftWallRight = new THREE.Mesh(new THREE.PlaneGeometry(15 - windowWidth/2 + windowHoleZ, windowHeight), wallMaterial);
+        leftWallRight.position.set(-15, windowHoleY, (15 + windowWidth/2 - windowHoleZ) / 2);
+        leftWallRight.rotation.y = Math.PI / 2;
+        scene.add(leftWallRight);
 
         // Window
         const windowFrame = new THREE.Group();
