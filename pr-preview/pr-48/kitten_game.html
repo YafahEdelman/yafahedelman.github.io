@@ -700,100 +700,175 @@
         rightEarTuft.scale.set(0.8, 1.2, 0.5);
         headGroup.add(rightEarTuft);
 
-        // === EYES - Much bigger and more expressive ===
+        // === EYES - Detailed and expressive with proper cat anatomy ===
         const eyeGroup = new THREE.Group();
 
-        // Left eye socket (slight indent)
-        const leftEyeSocket = new THREE.Group();
-        leftEyeSocket.position.set(0.26, 0.1, 0.5);
-        eyeGroup.add(leftEyeSocket);
+        // Additional eye materials
+        const materialLimbalRing = new THREE.MeshStandardMaterial({ color: 0x2d5a3d, roughness: 0.2 }); // Dark ring around iris
+        const materialInnerIris = new THREE.MeshStandardMaterial({ color: 0x66cc88, roughness: 0.15, metalness: 0.1 }); // Lighter inner iris
+        const materialBottomLid = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.9, side: THREE.DoubleSide });
 
-        const leftEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
-        leftEyeWhite.scale.z = 0.4;
-        leftEyeSocket.add(leftEyeWhite);
+        // Helper function to create a detailed eye
+        function createDetailedEye(xPos, isLeft) {
+            const socket = new THREE.Group();
+            socket.position.set(xPos, 0.1, 0.5);
 
-        // Iris (colored part) - bigger and more visible
-        const leftIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
-        leftIris.position.z = 0.04;
-        leftIris.scale.z = 0.3;
-        leftEyeSocket.add(leftIris);
+            // Eye white (sclera) - slightly visible around edges
+            const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.19, 24, 24), materialEyeWhite);
+            eyeWhite.scale.z = 0.4;
+            socket.add(eyeWhite);
 
-        // Pupil - vertical slit that can dilate
-        const leftPupilGroup = new THREE.Group();
-        leftPupilGroup.position.z = 0.06;
-        leftEyeSocket.add(leftPupilGroup);
+            // Limbal ring (dark ring around iris edge)
+            const limbalRing = new THREE.Mesh(new THREE.SphereGeometry(0.155, 24, 24), materialLimbalRing);
+            limbalRing.position.z = 0.03;
+            limbalRing.scale.z = 0.25;
+            socket.add(limbalRing);
 
-        const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
-        leftPupil.scale.set(0.5, 1, 0.2);
-        leftPupilGroup.add(leftPupil);
+            // Outer iris
+            const iris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
+            iris.position.z = 0.04;
+            iris.scale.z = 0.3;
+            socket.add(iris);
 
-        // Eye highlights (two for that cute anime look)
-        const leftHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
-        leftHighlight1.position.set(0.05, 0.06, 0.07);
-        leftEyeSocket.add(leftHighlight1);
+            // Inner iris (lighter center ring for depth)
+            const innerIris = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 20), materialInnerIris);
+            innerIris.position.z = 0.05;
+            innerIris.scale.z = 0.25;
+            socket.add(innerIris);
 
-        const leftHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
-        leftHighlight2.position.set(-0.03, -0.04, 0.07);
-        leftEyeSocket.add(leftHighlight2);
+            // Pupil group (for look direction)
+            const pupilGroup = new THREE.Group();
+            pupilGroup.position.z = 0.06;
+            socket.add(pupilGroup);
 
-        // Eyelid for blinking
-        const leftEyelid = new THREE.Mesh(
-            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-            materialEyelid
-        );
-        leftEyelid.rotation.x = Math.PI;
-        leftEyelid.position.z = 0.01;
-        leftEyelid.scale.z = 0.5;
-        leftEyelid.visible = false;
-        leftEyeSocket.add(leftEyelid);
+            // Pupil - vertical slit
+            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 16), materialPupil);
+            pupil.scale.set(0.4, 1.1, 0.15);
+            pupilGroup.add(pupil);
 
-        // Right eye (mirror of left)
-        const rightEyeSocket = new THREE.Group();
-        rightEyeSocket.position.set(-0.26, 0.1, 0.5);
-        eyeGroup.add(rightEyeSocket);
+            // Eye highlights (anime-style sparkles)
+            const highlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), materialEyeHighlight);
+            highlight1.position.set(isLeft ? 0.05 : -0.05, 0.07, 0.07);
+            socket.add(highlight1);
 
-        const rightEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
-        rightEyeWhite.scale.z = 0.4;
-        rightEyeSocket.add(rightEyeWhite);
+            const highlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), materialEyeHighlight);
+            highlight2.position.set(isLeft ? -0.02 : 0.02, -0.03, 0.07);
+            socket.add(highlight2);
 
-        const rightIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
-        rightIris.position.z = 0.04;
-        rightIris.scale.z = 0.3;
-        rightEyeSocket.add(rightIris);
+            // Third small highlight for extra sparkle
+            const highlight3 = new THREE.Mesh(new THREE.SphereGeometry(0.015, 6, 6), materialEyeHighlight);
+            highlight3.position.set(isLeft ? 0.06 : -0.06, -0.01, 0.075);
+            socket.add(highlight3);
 
-        const rightPupilGroup = new THREE.Group();
-        rightPupilGroup.position.z = 0.06;
-        rightEyeSocket.add(rightPupilGroup);
+            // Top eyelid for blinking
+            const topEyelid = new THREE.Mesh(
+                new THREE.SphereGeometry(0.20, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+                materialEyelid
+            );
+            topEyelid.rotation.x = Math.PI;
+            topEyelid.position.z = 0.01;
+            topEyelid.scale.z = 0.5;
+            topEyelid.visible = false;
+            socket.add(topEyelid);
 
-        const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
-        rightPupil.scale.set(0.5, 1, 0.2);
-        rightPupilGroup.add(rightPupil);
+            // Bottom eyelid for squinting/expressions
+            const bottomEyelid = new THREE.Mesh(
+                new THREE.SphereGeometry(0.20, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+                materialBottomLid
+            );
+            bottomEyelid.rotation.x = 0;
+            bottomEyelid.position.set(0, -0.02, 0.01);
+            bottomEyelid.scale.set(1, 0.6, 0.5);
+            bottomEyelid.visible = false;
+            socket.add(bottomEyelid);
 
-        const rightHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
-        rightHighlight1.position.set(0.05, 0.06, 0.07);
-        rightEyeSocket.add(rightHighlight1);
+            return {
+                socket,
+                eyeWhite,
+                iris,
+                innerIris,
+                limbalRing,
+                pupilGroup,
+                pupil,
+                highlights: [highlight1, highlight2, highlight3],
+                topEyelid,
+                bottomEyelid
+            };
+        }
 
-        const rightHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
-        rightHighlight2.position.set(-0.03, -0.04, 0.07);
-        rightEyeSocket.add(rightHighlight2);
+        // Create both eyes
+        const leftEye = createDetailedEye(0.26, true);
+        const rightEye = createDetailedEye(-0.26, false);
 
-        const rightEyelid = new THREE.Mesh(
-            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-            materialEyelid
-        );
-        rightEyelid.rotation.x = Math.PI;
-        rightEyelid.position.z = 0.01;
-        rightEyelid.scale.z = 0.5;
-        rightEyelid.visible = false;
-        rightEyeSocket.add(rightEyelid);
-
+        eyeGroup.add(leftEye.socket);
+        eyeGroup.add(rightEye.socket);
         headGroup.add(eyeGroup);
+
+        // Aliases for backward compatibility
+        const leftEyeSocket = leftEye.socket;
+        const rightEyeSocket = rightEye.socket;
+        const leftEyeWhite = leftEye.eyeWhite;
+        const rightEyeWhite = rightEye.eyeWhite;
+        const leftIris = leftEye.iris;
+        const rightIris = rightEye.iris;
+        const leftPupilGroup = leftEye.pupilGroup;
+        const rightPupilGroup = rightEye.pupilGroup;
+        const leftPupil = leftEye.pupil;
+        const rightPupil = rightEye.pupil;
+        const leftEyelid = leftEye.topEyelid;
+        const rightEyelid = rightEye.topEyelid;
+        const leftBottomLid = leftEye.bottomEyelid;
+        const rightBottomLid = rightEye.bottomEyelid;
 
         // Eye state for blinking and expressions
         let blinkTimer = 0;
         let isBlinking = false;
         let blinkProgress = 0;
+        let blinkType = 'normal'; // 'normal', 'slow', 'double', 'sleepy'
         let pupilDilation = 1.0; // 1.0 = normal, 0.5 = dilated (excited), 1.5 = slits (bright/alert)
+        let eyeLookTarget = new THREE.Vector3(0, 0, 1); // Direction eyes are looking
+        let currentEyeLook = new THREE.Vector3(0, 0, 1);
+
+        // Expression state
+        let currentExpression = 'neutral';
+        let expressionIntensity = 0;
+        let targetTopLidClose = 0; // 0 = open, 1 = closed
+        let targetBottomLidClose = 0; // 0 = open, 1 = raised (squint)
+        let currentTopLidClose = 0;
+        let currentBottomLidClose = 0;
+
+        // Expression presets
+        const expressions = {
+            neutral: { topLid: 0, bottomLid: 0, pupilScale: 1.0 },
+            happy: { topLid: 0.3, bottomLid: 0.5, pupilScale: 0.8 },
+            sleepy: { topLid: 0.6, bottomLid: 0.2, pupilScale: 0.7 },
+            excited: { topLid: 0, bottomLid: 0, pupilScale: 0.5 },
+            alert: { topLid: 0, bottomLid: 0, pupilScale: 1.4 },
+            surprised: { topLid: 0, bottomLid: 0, pupilScale: 0.4 },
+            focused: { topLid: 0.15, bottomLid: 0.1, pupilScale: 1.2 },
+            content: { topLid: 0.4, bottomLid: 0.4, pupilScale: 0.6 },
+            angry: { topLid: 0.3, bottomLid: 0.3, pupilScale: 1.3 }
+        };
+
+        // Set expression function
+        function setExpression(name, intensity = 1.0) {
+            if (expressions[name]) {
+                currentExpression = name;
+                expressionIntensity = intensity;
+                const expr = expressions[name];
+                targetTopLidClose = expr.topLid * intensity;
+                targetBottomLidClose = expr.bottomLid * intensity;
+                pupilDilation = THREE.MathUtils.lerp(1.0, expr.pupilScale, intensity);
+            }
+        }
+
+        // Make eyes look at a world position
+        function lookAtPosition(worldPos) {
+            // Convert world position to local head space direction
+            const headWorldPos = new THREE.Vector3();
+            headGroup.getWorldPosition(headWorldPos);
+            eyeLookTarget.copy(worldPos).sub(headWorldPos).normalize();
+        }
 
         // === NOSE - Cute pink triangle ===
         const noseGeo = new THREE.SphereGeometry(0.08, 12, 12);
@@ -2153,35 +2228,72 @@
                 if (dust.mesh.position.z < 0) dust.mesh.position.z = 4;
             });
 
-            // === KITTEN BLINKING ===
+            // === KITTEN BLINKING AND EXPRESSIONS ===
             blinkTimer -= dt;
             if (blinkTimer <= 0 && !isBlinking) {
-                // Start a blink randomly every 2-6 seconds
+                // Start a blink with random type
                 isBlinking = true;
                 blinkProgress = 0;
-                blinkTimer = 2 + Math.random() * 4;
+
+                // Choose blink type based on state
+                const rand = Math.random();
+                if (state === 'SLEEP' || state === 'SUNBATHE' || stats.energy < 30) {
+                    blinkType = rand < 0.4 ? 'slow' : (rand < 0.7 ? 'sleepy' : 'normal');
+                    blinkTimer = 1.5 + Math.random() * 2;
+                } else if (state === 'PET' || state === 'GROOM') {
+                    blinkType = rand < 0.3 ? 'slow' : 'normal';
+                    blinkTimer = 2 + Math.random() * 3;
+                } else {
+                    blinkType = rand < 0.15 ? 'double' : 'normal';
+                    blinkTimer = 2.5 + Math.random() * 4;
+                }
             }
 
+            // Animate blink based on type
             if (isBlinking) {
-                blinkProgress += dt * 8; // Blink speed
-                if (blinkProgress < 1) {
-                    // Closing
-                    const closeAmount = blinkProgress;
-                    leftEyelid.visible = true;
-                    rightEyelid.visible = true;
-                    leftEyelid.scale.y = closeAmount;
-                    rightEyelid.scale.y = closeAmount;
-                    leftEyeWhite.scale.y = 1 - closeAmount * 0.8;
-                    rightEyeWhite.scale.y = 1 - closeAmount * 0.8;
-                } else if (blinkProgress < 2) {
-                    // Opening
-                    const openAmount = blinkProgress - 1;
-                    leftEyelid.scale.y = 1 - openAmount;
-                    rightEyelid.scale.y = 1 - openAmount;
-                    leftEyeWhite.scale.y = 0.2 + openAmount * 0.8;
-                    rightEyeWhite.scale.y = 0.2 + openAmount * 0.8;
+                const blinkSpeed = blinkType === 'slow' ? 4 : (blinkType === 'sleepy' ? 3 : 8);
+                const maxProgress = blinkType === 'double' ? 3.5 : 2;
+                blinkProgress += dt * blinkSpeed;
+
+                let effectiveClose = 0;
+                if (blinkType === 'double') {
+                    // Double blink pattern
+                    if (blinkProgress < 0.8) {
+                        effectiveClose = Math.sin(blinkProgress / 0.8 * Math.PI);
+                    } else if (blinkProgress < 1.5) {
+                        effectiveClose = 0;
+                    } else if (blinkProgress < 2.3) {
+                        effectiveClose = Math.sin((blinkProgress - 1.5) / 0.8 * Math.PI);
+                    } else {
+                        effectiveClose = 0;
+                    }
+                } else if (blinkType === 'sleepy') {
+                    // Slow, heavy blink - eyes stay partially closed longer
+                    if (blinkProgress < 1) {
+                        effectiveClose = blinkProgress;
+                    } else if (blinkProgress < 1.5) {
+                        effectiveClose = 1; // Hold closed
+                    } else {
+                        effectiveClose = Math.max(0, 2.5 - blinkProgress);
+                    }
                 } else {
-                    // Done blinking
+                    // Normal or slow blink
+                    if (blinkProgress < 1) {
+                        effectiveClose = blinkProgress;
+                    } else {
+                        effectiveClose = Math.max(0, 2 - blinkProgress);
+                    }
+                }
+
+                // Apply blink to eyelids
+                leftEyelid.visible = effectiveClose > 0.05;
+                rightEyelid.visible = effectiveClose > 0.05;
+                leftEyelid.scale.y = effectiveClose;
+                rightEyelid.scale.y = effectiveClose;
+                leftEyeWhite.scale.y = 1 - effectiveClose * 0.85;
+                rightEyeWhite.scale.y = 1 - effectiveClose * 0.85;
+
+                if (blinkProgress >= maxProgress) {
                     isBlinking = false;
                     leftEyelid.visible = false;
                     rightEyelid.visible = false;
@@ -2190,16 +2302,88 @@
                 }
             }
 
+            // === EXPRESSION SYSTEM ===
+            // Set expression based on state
+            if (state === 'PET') {
+                setExpression('happy', 0.8);
+            } else if (state === 'SLEEP') {
+                setExpression('sleepy', 1.0);
+            } else if (state === 'HUNT') {
+                setExpression('focused', 0.7);
+            } else if (state === 'PLAY' || state === 'LASER' || state === 'ZOOMIES') {
+                setExpression('excited', 0.9);
+            } else if (state === 'SUNBATHE' || state === 'GROOM') {
+                setExpression('content', 0.6);
+            } else if (state === 'CURIOUS') {
+                setExpression('alert', 0.5);
+            } else {
+                setExpression('neutral', 0.3);
+            }
+
+            // Smoothly interpolate expression
+            currentTopLidClose = THREE.MathUtils.lerp(currentTopLidClose, targetTopLidClose, 4 * dt);
+            currentBottomLidClose = THREE.MathUtils.lerp(currentBottomLidClose, targetBottomLidClose, 4 * dt);
+
+            // Apply expression to bottom eyelids (when not blinking)
+            if (!isBlinking && currentBottomLidClose > 0.05) {
+                leftBottomLid.visible = true;
+                rightBottomLid.visible = true;
+                leftBottomLid.scale.y = 0.6 * currentBottomLidClose;
+                rightBottomLid.scale.y = 0.6 * currentBottomLidClose;
+                leftBottomLid.position.y = -0.02 + currentBottomLidClose * 0.08;
+                rightBottomLid.position.y = -0.02 + currentBottomLidClose * 0.08;
+            } else if (!isBlinking) {
+                leftBottomLid.visible = false;
+                rightBottomLid.visible = false;
+            }
+
+            // Apply partial top lid close for expressions (when not actively blinking)
+            if (!isBlinking && currentTopLidClose > 0.05) {
+                leftEyelid.visible = true;
+                rightEyelid.visible = true;
+                leftEyelid.scale.y = currentTopLidClose * 0.7;
+                rightEyelid.scale.y = currentTopLidClose * 0.7;
+                leftEyeWhite.scale.y = 1 - currentTopLidClose * 0.5;
+                rightEyeWhite.scale.y = 1 - currentTopLidClose * 0.5;
+            }
+
+            // === EYE TRACKING ===
+            // Find something interesting to look at
+            const nearToy = findNearestToy(8);
+            if (nearToy && (state === 'IDLE' || state === 'HUNT' || state === 'CURIOUS')) {
+                lookAtPosition(nearToy.mesh.position);
+            } else if (laserDot.visible) {
+                lookAtPosition(laserDot.position);
+            } else {
+                // Default look forward
+                eyeLookTarget.set(0, 0, 1);
+            }
+
+            // Smooth eye movement
+            currentEyeLook.lerp(eyeLookTarget, 5 * dt);
+
+            // Apply look direction to pupils (subtle movement)
+            const lookX = THREE.MathUtils.clamp(currentEyeLook.x * 0.03, -0.03, 0.03);
+            const lookY = THREE.MathUtils.clamp(currentEyeLook.y * 0.02, -0.02, 0.02);
+            leftPupilGroup.position.x = lookX;
+            leftPupilGroup.position.y = lookY;
+            rightPupilGroup.position.x = lookX;
+            rightPupilGroup.position.y = lookY;
+
             // Pupil dilation based on state/environment
             let targetDilation = 1.0;
             if (state === 'HUNT' || state === 'PLAY' || state === 'LASER') {
                 targetDilation = 1.8; // Dilated (excited)
             } else if (state === 'SLEEP' || state === 'SUNBATHE') {
                 targetDilation = 0.6; // Relaxed slits
+            } else if (state === 'ZOOMIES') {
+                targetDilation = 2.0; // Super dilated
+            } else if (state === 'CURIOUS') {
+                targetDilation = 1.5;
             }
             pupilDilation = THREE.MathUtils.lerp(pupilDilation, targetDilation, 2 * dt);
-            leftPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
-            rightPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
+            leftPupil.scale.x = 0.4 * (2.2 - pupilDilation * 0.5);
+            rightPupil.scale.x = 0.4 * (2.2 - pupilDilation * 0.5);
 
             // Slowly decrease stats
             stats.happiness = Math.max(0, stats.happiness - dt * 0.5);
