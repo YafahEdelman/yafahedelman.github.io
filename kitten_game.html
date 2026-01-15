@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.3</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.4</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -2113,8 +2113,9 @@
                 if (clickedToy) {
                     draggedToy = clickedToy;
                     draggedToy.velocity.set(0, 0, 0);
-                    // Kitten notices!
-                    if (state === 'IDLE' || state === 'WALK') {
+                    // Kitten might notice (30% chance if idle, less if busy)
+                    const noticeChance = (state === 'IDLE') ? 0.3 : (state === 'WALK') ? 0.15 : 0;
+                    if (Math.random() < noticeChance) {
                         targetToy = draggedToy;
                         setState('HUNT', 'toy');
                         stateTimer = 10;
@@ -2141,7 +2142,8 @@
                 if (pos) {
                     laserDot.position.set(pos.x, 0.02, pos.z);
                     laserDot.visible = true;
-                    if (state !== 'SLEEP') {
+                    // Laser is hard to resist but not always immediate (70% chance)
+                    if (state !== 'SLEEP' && Math.random() < 0.7) {
                         setState('LASER');
                         targetPos.copy(pos);
                         currentSpeed = runSpeed;
@@ -2151,7 +2153,9 @@
                 const pos = getFloorIntersection(event);
                 if (pos) {
                     spawnTreat(pos.x, pos.z);
-                    if (state === 'IDLE' || state === 'WALK') {
+                    // Only notice treat sometimes (40% if idle, 20% otherwise)
+                    const treatNotice = (state === 'IDLE') ? 0.4 : (state === 'WALK') ? 0.2 : 0.1;
+                    if (Math.random() < treatNotice) {
                         setState('WALK', 'food');
                         targetPos.copy(pos);
                         stateTimer = 10;
@@ -2164,8 +2168,9 @@
                     specialYarn.mesh.position.set(pos.x, 0.35, pos.z);
                     specialYarn.velocity.set(0, 0, 0);
                     draggedToy = specialYarn;
-                    // Kitten notices the yarn!
-                    if (state !== 'SLEEP' && state !== 'PET') {
+                    // Kitten might notice the yarn (50% chance if not busy)
+                    const yarnNotice = (state === 'IDLE') ? 0.5 : (state === 'WALK') ? 0.3 : 0.1;
+                    if (state !== 'SLEEP' && Math.random() < yarnNotice) {
                         targetToy = specialYarn;
                         setState('HUNT', 'toy');
                         stateTimer = 10;
