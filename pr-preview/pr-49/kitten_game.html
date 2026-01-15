@@ -3967,6 +3967,15 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // Expose objects for screenshot tool
+        window.scene = scene;
+        window.camera = camera;
+        window.renderer = renderer;
+        window.cat = kittenGroup;
+        window.headGroup = headGroup;
+        window.tailGroup = tailGroup;
+        window.legs = legs;
+
         animate();
     </script>
 </body>
