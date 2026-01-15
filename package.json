@@ -1,0 +1,22 @@
+{
+  "name": "yafahedelman.github.io",
+  "version": "1.0.0",
+  "description": "",
+  "main": "data.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:52528/git/YafahEdelman/yafahedelman.github.io"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "playwright": "^1.57.0"
+  },
+  "dependencies": {
+    "three": "^0.150.0"
+  }
+}

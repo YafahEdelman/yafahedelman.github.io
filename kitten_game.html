@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D Kitten Simulator - AI Designed Tiny Games</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.150.0/build/three.min.js" onerror="this.onerror=null;this.src='three.min.js';"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         canvas { touch-action: none; display: block; }
@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.6.0</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v2.1.0</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -726,6 +726,195 @@
         const materialPawPad = new THREE.MeshStandardMaterial({ color: 0xffb5c5, roughness: 0.4 });
         const materialEyelid = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
 
+        // === FUR SHELL SYSTEM ===
+        // Create procedural fur alpha texture
+        function createFurTexture(size = 512) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Use Perlin-like noise for softer, more natural fur
+            // Start with mid-gray base
+            ctx.fillStyle = '#404040';
+            ctx.fillRect(0, 0, size, size);
+
+            // Layer 1: Large soft blobs for base variation
+            ctx.globalAlpha = 0.4;
+            for (let i = 0; i < 200; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                const radius = 8 + Math.random() * 15;
+                const brightness = Math.random() > 0.5 ? '#666666' : '#2a2a2a';
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                gradient.addColorStop(0, brightness);
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Layer 2: Hair strands - denser, finer dots
+            ctx.globalAlpha = 1.0;
+            const density = 12000;
+            for (let i = 0; i < density; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                const radius = 0.4 + Math.random() * 0.6;
+                // Higher brightness for better visibility
+                const brightness = 200 + Math.floor(Math.random() * 55);
+                ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Layer 3: Soft glow spots for fluffy highlights
+            ctx.globalAlpha = 0.25;
+            for (let i = 0; i < 300; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                const radius = 3 + Math.random() * 5;
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                gradient.addColorStop(0, '#ffffff');
+                gradient.addColorStop(0.5, '#888888');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(5, 5);
+            return texture;
+        }
+
+        const furTexture = createFurTexture();
+
+        // Fur shell vertex shader - displaces vertices along normals
+        const furVertexShader = `
+            uniform float shellIndex;
+            uniform float shellCount;
+            uniform float furLength;
+            uniform float time;
+
+            varying vec2 vUv;
+            varying float vShellIndex;
+            varying vec3 vNormal;
+
+            void main() {
+                vUv = uv * 8.0; // Tile the texture
+                vShellIndex = shellIndex;
+                vNormal = normal;
+
+                // Calculate displacement along normal based on shell layer
+                float displacement = (shellIndex / shellCount) * furLength;
+
+                // Add subtle wave motion for fur animation
+                float wave = sin(time * 2.0 + position.x * 3.0 + position.z * 3.0) * 0.02;
+                wave *= shellIndex / shellCount; // More movement at tips
+
+                // Gravity effect - fur hangs down slightly
+                vec3 gravityOffset = vec3(0.0, -0.015, 0.0) * shellIndex;
+
+                vec3 newPosition = position + normal * displacement + gravityOffset;
+                newPosition.x += wave;
+                newPosition.z += wave * 0.5;
+
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+            }
+        `;
+
+        // Fur shell fragment shader - applies alpha texture for strand pattern
+        const furFragmentShader = `
+            uniform sampler2D furTexture;
+            uniform vec3 furColor;
+            uniform vec3 tipColor;
+            uniform float shellIndex;
+            uniform float shellCount;
+            uniform float thickness;
+
+            varying vec2 vUv;
+            varying float vShellIndex;
+            varying vec3 vNormal;
+
+            void main() {
+                // Sample fur texture
+                vec4 furSample = texture2D(furTexture, vUv);
+
+                // Calculate alpha threshold - strands taper toward tips
+                // Use a smooth cubic curve for natural tapering
+                float normalizedHeight = shellIndex / shellCount;
+                float t = normalizedHeight * normalizedHeight * (3.0 - 2.0 * normalizedHeight);
+                float alphaThreshold = mix(0.2, 0.5, t);
+
+                // Discard pixels below threshold (creates strand pattern)
+                if (furSample.r < alphaThreshold) {
+                    discard;
+                }
+
+                // Blend base color to tip color - more visible gradient
+                vec3 color = mix(furColor, tipColor, normalizedHeight * 0.7);
+
+                // Add subtle ambient occlusion at base (darker between strands)
+                float ao = mix(0.7, 1.0, normalizedHeight);
+                color *= ao;
+
+                // Better lighting with rim effect
+                float light = 0.5 + 0.5 * dot(vNormal, normalize(vec3(0.3, 1.0, 0.5)));
+                color *= light;
+
+                // Slight alpha fade at tips for softer look
+                float alpha = 1.0 - normalizedHeight * 0.3;
+
+                gl_FragColor = vec4(color, alpha);
+            }
+        `;
+
+        // Function to create fur shells for a mesh
+        const furShells = [];
+        const SHELL_COUNT = 16;
+        const FUR_LENGTH = 0.1;
+
+        function createFurShells(geometry, baseColor, tipColor, parent, position, scale, rotation) {
+            const shells = [];
+
+            for (let i = 1; i <= SHELL_COUNT; i++) {
+                const shellMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        furTexture: { value: furTexture },
+                        furColor: { value: new THREE.Color(baseColor) },
+                        tipColor: { value: new THREE.Color(tipColor) },
+                        shellIndex: { value: i },
+                        shellCount: { value: SHELL_COUNT },
+                        furLength: { value: FUR_LENGTH },
+                        thickness: { value: 1.0 },
+                        time: { value: 0 }
+                    },
+                    vertexShader: furVertexShader,
+                    fragmentShader: furFragmentShader,
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+
+                const shell = new THREE.Mesh(geometry.clone(), shellMaterial);
+                shell.position.copy(position);
+                if (scale) shell.scale.copy(scale);
+                if (rotation) shell.rotation.copy(rotation);
+                shell.renderOrder = i; // Render outer shells last
+                parent.add(shell);
+                shells.push(shell);
+            }
+
+            return shells;
+        }
+
         // Body - rounder and cuter
         const bodyGroup = new THREE.Group();
         const bodyGeo = new THREE.SphereGeometry(0.7, 32, 32);
@@ -756,6 +945,30 @@
         }
 
         bodyGroup.position.y = 1.0;
+
+        // Add fur shells to body
+        const bodyFurShells = createFurShells(
+            bodyGeo,
+            furColor,
+            0xffcc88, // Lighter tips
+            bodyGroup,
+            new THREE.Vector3(0, 0, 0),
+            null,
+            null
+        );
+        furShells.push(...bodyFurShells);
+
+        // Add fur to chest fluff
+        const chestFurShells = createFurShells(
+            new THREE.SphereGeometry(0.4, 16, 16),
+            bellyColor,
+            0xffffff,
+            bodyGroup,
+            new THREE.Vector3(0, 0.1, 0.5),
+            new THREE.Vector3(0.9, 0.8, 0.5),
+            null
+        );
+        furShells.push(...chestFurShells);
         kittenGroup.add(bodyGroup);
 
         // === HEAD - Much bigger for cute proportions ===
@@ -769,6 +982,18 @@
         head.scale.set(1, 0.95, 0.9);
         head.castShadow = true;
         headGroup.add(head);
+
+        // Add fur shells to head
+        const headFurShells = createFurShells(
+            headGeo,
+            furColor,
+            0xffcc88,
+            headGroup,
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(1, 0.95, 0.9),
+            null
+        );
+        furShells.push(...headFurShells);
 
         // Forehead fluff
         const foreheadFluff = new THREE.Mesh(
@@ -2361,6 +2586,13 @@
             danglingToy.position.x = 0.6 + Math.sin(time * 2) * 0.15;
             danglingToy.position.y = 3.5 + Math.sin(time * 3) * 0.1;
 
+            // Update fur shell animation
+            furShells.forEach(shell => {
+                if (shell.material.uniforms && shell.material.uniforms.time) {
+                    shell.material.uniforms.time.value = time;
+                }
+            });
+
             // === ENVIRONMENT ANIMATIONS ===
             // Birds flying past window
             birds.forEach((bird, index) => {
@@ -3097,17 +3329,20 @@
                 }
             }
             else if (state === 'EAT') {
-                stateTimer -= dt;
-
                 // Head down bobbing
                 headGroup.position.y = 1.5 + Math.sin(time * 8) * 0.05;
                 headGroup.rotation.x = 0.4;
 
-                if (stateTimer <= 0) {
+                // Gradually fill up while eating
+                stats.hunger = Math.min(100, stats.hunger + dt * 15);
+                updateStatsUI();
+
+                // Keep eating until full (or nearly full)
+                if (stats.hunger >= 95) {
                     setState('IDLE');
                     stateTimer = 2;
                     headGroup.rotation.x = 0;
-                    stats.hunger = Math.min(100, stats.hunger + 30);
+                    stats.hunger = 100;
                     updateStatsUI();
                 }
             }
@@ -3731,6 +3966,15 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        // Expose objects for screenshot tool
+        window.scene = scene;
+        window.camera = camera;
+        window.renderer = renderer;
+        window.cat = kittenGroup;
+        window.headGroup = headGroup;
+        window.tailGroup = tailGroup;
+        window.legs = legs;
 
         animate();
     </script>
