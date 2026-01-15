@@ -216,8 +216,9 @@
         <div class="stat-bar"><div id="happiness-bar" class="stat-fill" style="width: 80%; background: linear-gradient(90deg, #f472b6, #ec4899);"></div></div>
         <div style="font-size: 12px; color: #666;">Energy</div>
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
-        <div style="font-size: 12px; color: #666;">Hunger</div>
+        <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.6.0</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -291,9 +292,10 @@
         scene.add(fillLight);
 
         // Sunbeam spotlight
-        const sunbeamLight = new THREE.SpotLight(0xfffacd, 0.8, 20, Math.PI / 6, 0.5);
-        sunbeamLight.position.set(6, 12, 2);
-        sunbeamLight.target.position.set(5, 0, 2);
+        // Sunbeam light coming through window - angled to hit floor near window
+        const sunbeamLight = new THREE.SpotLight(0xfffacd, 1.2, 25, Math.PI / 5, 0.3);
+        sunbeamLight.position.set(-12, 10, 0);
+        sunbeamLight.target.position.set(-10, 0, 2);
         sunbeamLight.castShadow = true;
         scene.add(sunbeamLight);
         scene.add(sunbeamLight.target);
@@ -307,17 +309,43 @@
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // Walls
-        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.DoubleSide });
+        // Walls - only visible from inside the room (FrontSide)
+        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.FrontSide });
         const backWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), wallMaterial);
         backWall.position.set(0, 7.5, -15);
         backWall.receiveShadow = true;
         scene.add(backWall);
 
-        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), wallMaterial);
-        leftWall.position.set(-15, 7.5, 0);
-        leftWall.rotation.y = Math.PI / 2;
-        scene.add(leftWall);
+        // Left wall with window hole - create segments around the window
+        // Window is at y=5, z=0, approximately 5 wide x 4 tall
+        const windowHoleZ = 0;
+        const windowHoleY = 5;
+        const windowWidth = 5;
+        const windowHeight = 4;
+
+        // Wall segment above window
+        const leftWallTop = new THREE.Mesh(new THREE.PlaneGeometry(30, 15 - (windowHoleY + windowHeight/2)), wallMaterial);
+        leftWallTop.position.set(-15, (15 + windowHoleY + windowHeight/2) / 2, 0);
+        leftWallTop.rotation.y = Math.PI / 2;
+        scene.add(leftWallTop);
+
+        // Wall segment below window
+        const leftWallBottom = new THREE.Mesh(new THREE.PlaneGeometry(30, windowHoleY - windowHeight/2), wallMaterial);
+        leftWallBottom.position.set(-15, (windowHoleY - windowHeight/2) / 2, 0);
+        leftWallBottom.rotation.y = Math.PI / 2;
+        scene.add(leftWallBottom);
+
+        // Wall segment left of window
+        const leftWallLeft = new THREE.Mesh(new THREE.PlaneGeometry(15 - windowWidth/2 - windowHoleZ, windowHeight), wallMaterial);
+        leftWallLeft.position.set(-15, windowHoleY, -(15 + windowWidth/2 + windowHoleZ) / 2);
+        leftWallLeft.rotation.y = Math.PI / 2;
+        scene.add(leftWallLeft);
+
+        // Wall segment right of window
+        const leftWallRight = new THREE.Mesh(new THREE.PlaneGeometry(15 - windowWidth/2 + windowHoleZ, windowHeight), wallMaterial);
+        leftWallRight.position.set(-15, windowHoleY, (15 + windowWidth/2 - windowHoleZ) / 2);
+        leftWallRight.rotation.y = Math.PI / 2;
+        scene.add(leftWallRight);
 
         // Window
         const windowFrame = new THREE.Group();
@@ -337,17 +365,77 @@
         const frameMiddle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 0.2), frameMat);
         windowFrame.add(frameMiddle);
 
-        const windowGlass = new THREE.Mesh(
-            new THREE.PlaneGeometry(4.4, 3.7),
-            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4 })
+        // Create openable window panes (two halves)
+        const windowGlassLeft = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.1, 3.7),
+            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4, side: THREE.FrontSide })
         );
-        windowGlass.position.z = -0.1;
-        windowFrame.add(windowGlass);
+        windowGlassLeft.position.set(-1.1, 0, -0.1);
+        windowGlassLeft.userData.isWindow = true;
+        windowGlassLeft.userData.windowSide = 'left';
+        windowFrame.add(windowGlassLeft);
+
+        const windowGlassRight = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.1, 3.7),
+            new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.4, side: THREE.FrontSide })
+        );
+        windowGlassRight.position.set(1.1, 0, -0.1);
+        windowGlassRight.userData.isWindow = true;
+        windowGlassRight.userData.windowSide = 'right';
+        windowFrame.add(windowGlassRight);
+
         windowFrame.position.set(-14.8, 5, 0);
         windowFrame.rotation.y = Math.PI / 2;
         scene.add(windowFrame);
 
-        // Sky background visible through window
+        // Window state
+        let windowOpen = false;
+        const windowPanes = { left: windowGlassLeft, right: windowGlassRight };
+        let windowAnimating = false;
+
+        // Toggle window open/close with animation
+        function toggleWindow() {
+            if (windowAnimating) return;
+            windowAnimating = true;
+            windowOpen = !windowOpen;
+
+            // Fade out glass when opening, fade in when closing
+            const targetOpacity = windowOpen ? 0.1 : 0.4;
+            const startOpacityLeft = windowPanes.left.material.opacity;
+            const startOpacityRight = windowPanes.right.material.opacity;
+
+            const duration = 500;
+            const startTime = Date.now();
+
+            function animateWindow() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3); // ease out cubic
+
+                // Fade out/in the glass
+                const newOpacity = startOpacityLeft + (targetOpacity - startOpacityLeft) * eased;
+                windowPanes.left.material.opacity = newOpacity;
+                windowPanes.right.material.opacity = newOpacity;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateWindow);
+                } else {
+                    windowAnimating = false;
+                    // Cat notices the window!
+                    if (windowOpen && (state === 'IDLE' || state === 'WALK')) {
+                        // Cat might go look at window
+                        if (Math.random() < 0.5) {
+                            setState('WALK', 'window');
+                            targetPos.set(-13, 0, 0);
+                            stateTimer = 8;
+                        }
+                    }
+                }
+            }
+            animateWindow();
+        }
+
+        // Sky background visible through window hole
         const skyPlane = new THREE.Mesh(
             new THREE.PlaneGeometry(6, 5),
             new THREE.MeshBasicMaterial({
@@ -355,9 +443,18 @@
                 side: THREE.DoubleSide
             })
         );
-        skyPlane.position.set(-15.5, 5, 0);
+        skyPlane.position.set(-15.2, 5, 0);
         skyPlane.rotation.y = Math.PI / 2;
         scene.add(skyPlane);
+
+        // Exterior blocker - hides window contents from outside view
+        const exteriorBlocker = new THREE.Mesh(
+            new THREE.PlaneGeometry(6, 5),
+            new THREE.MeshLambertMaterial({ color: 0xfff8dc, side: THREE.BackSide })
+        );
+        exteriorBlocker.position.set(-15.15, 5, 0);
+        exteriorBlocker.rotation.y = Math.PI / 2;
+        scene.add(exteriorBlocker);
 
         // Clouds outside window
         const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
@@ -443,9 +540,9 @@
                 dustMat
             );
             dust.position.set(
-                5 + (Math.random() - 0.5) * 3,
+                -10 + (Math.random() - 0.5) * 4,
                 1 + Math.random() * 4,
-                2 + (Math.random() - 0.5) * 3
+                (Math.random() - 0.5) * 4
             );
             scene.add(dust);
             dustMotes.push({
@@ -544,14 +641,59 @@
         bowlGroup.position.set(-7, 0.125, 4);
         scene.add(bowlGroup);
 
-        // Sunbeam area marker (subtle circle on floor)
+        // Realistic sunbeam near window - elongated trapezoid shape like light through window
+        const sunbeamShape = new THREE.Shape();
+        sunbeamShape.moveTo(-1.5, 0);      // Near window edge
+        sunbeamShape.lineTo(1.5, 0);       // Near window edge
+        sunbeamShape.lineTo(3, 6);         // Spreads as it goes into room
+        sunbeamShape.lineTo(-3, 6);
+        sunbeamShape.closePath();
+
+        const sunbeamGeo = new THREE.ShapeGeometry(sunbeamShape);
         const sunbeamArea = new THREE.Mesh(
-            new THREE.CircleGeometry(2, 32),
-            new THREE.MeshBasicMaterial({ color: 0xfffacd, transparent: true, opacity: 0.3 })
+            sunbeamGeo,
+            new THREE.MeshBasicMaterial({
+                color: 0xfffacd,
+                transparent: true,
+                opacity: 0.25,
+                side: THREE.DoubleSide
+            })
         );
         sunbeamArea.rotation.x = -Math.PI / 2;
-        sunbeamArea.position.set(5, 0.01, 2);
+        sunbeamArea.rotation.z = Math.PI / 2; // Point into room from window
+        sunbeamArea.position.set(-11, 0.01, 0);
         scene.add(sunbeamArea);
+
+        // Brighter inner sunbeam
+        const innerSunbeamShape = new THREE.Shape();
+        innerSunbeamShape.moveTo(-0.8, 0.5);
+        innerSunbeamShape.lineTo(0.8, 0.5);
+        innerSunbeamShape.lineTo(1.8, 4);
+        innerSunbeamShape.lineTo(-1.8, 4);
+        innerSunbeamShape.closePath();
+
+        const innerSunbeamArea = new THREE.Mesh(
+            new THREE.ShapeGeometry(innerSunbeamShape),
+            new THREE.MeshBasicMaterial({
+                color: 0xfff8dc,
+                transparent: true,
+                opacity: 0.35,
+                side: THREE.DoubleSide
+            })
+        );
+        innerSunbeamArea.rotation.x = -Math.PI / 2;
+        innerSunbeamArea.rotation.z = Math.PI / 2;
+        innerSunbeamArea.position.set(-11, 0.02, 0);
+        scene.add(innerSunbeamArea);
+
+        // Hotspot where sunbeam is brightest
+        const sunbeamHotspot = new THREE.Mesh(
+            new THREE.CircleGeometry(1.2, 32),
+            new THREE.MeshBasicMaterial({ color: 0xfffacd, transparent: true, opacity: 0.4 })
+        );
+        sunbeamHotspot.rotation.x = -Math.PI / 2;
+        sunbeamHotspot.position.set(-9, 0.03, 1);
+        scene.add(sunbeamHotspot);
 
         // Rug
         const rug = new THREE.Mesh(
@@ -700,100 +842,175 @@
         rightEarTuft.scale.set(0.8, 1.2, 0.5);
         headGroup.add(rightEarTuft);
 
-        // === EYES - Much bigger and more expressive ===
+        // === EYES - Detailed and expressive with proper cat anatomy ===
         const eyeGroup = new THREE.Group();
 
-        // Left eye socket (slight indent)
-        const leftEyeSocket = new THREE.Group();
-        leftEyeSocket.position.set(0.26, 0.1, 0.5);
-        eyeGroup.add(leftEyeSocket);
+        // Additional eye materials
+        const materialLimbalRing = new THREE.MeshStandardMaterial({ color: 0x2d5a3d, roughness: 0.2 }); // Dark ring around iris
+        const materialInnerIris = new THREE.MeshStandardMaterial({ color: 0x66cc88, roughness: 0.15, metalness: 0.1 }); // Lighter inner iris
+        const materialBottomLid = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.9, side: THREE.DoubleSide });
 
-        const leftEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
-        leftEyeWhite.scale.z = 0.4;
-        leftEyeSocket.add(leftEyeWhite);
+        // Helper function to create a detailed eye
+        function createDetailedEye(xPos, isLeft) {
+            const socket = new THREE.Group();
+            socket.position.set(xPos, 0.1, 0.5);
 
-        // Iris (colored part) - bigger and more visible
-        const leftIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
-        leftIris.position.z = 0.04;
-        leftIris.scale.z = 0.3;
-        leftEyeSocket.add(leftIris);
+            // Eye white (sclera) - slightly visible around edges
+            const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.19, 24, 24), materialEyeWhite);
+            eyeWhite.scale.z = 0.4;
+            socket.add(eyeWhite);
 
-        // Pupil - vertical slit that can dilate
-        const leftPupilGroup = new THREE.Group();
-        leftPupilGroup.position.z = 0.06;
-        leftEyeSocket.add(leftPupilGroup);
+            // Limbal ring (dark ring around iris edge)
+            const limbalRing = new THREE.Mesh(new THREE.SphereGeometry(0.155, 24, 24), materialLimbalRing);
+            limbalRing.position.z = 0.03;
+            limbalRing.scale.z = 0.25;
+            socket.add(limbalRing);
 
-        const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
-        leftPupil.scale.set(0.5, 1, 0.2);
-        leftPupilGroup.add(leftPupil);
+            // Outer iris
+            const iris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
+            iris.position.z = 0.04;
+            iris.scale.z = 0.3;
+            socket.add(iris);
 
-        // Eye highlights (two for that cute anime look)
-        const leftHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
-        leftHighlight1.position.set(0.05, 0.06, 0.07);
-        leftEyeSocket.add(leftHighlight1);
+            // Inner iris (lighter center ring for depth)
+            const innerIris = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 20), materialInnerIris);
+            innerIris.position.z = 0.05;
+            innerIris.scale.z = 0.25;
+            socket.add(innerIris);
 
-        const leftHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
-        leftHighlight2.position.set(-0.03, -0.04, 0.07);
-        leftEyeSocket.add(leftHighlight2);
+            // Pupil group (for look direction)
+            const pupilGroup = new THREE.Group();
+            pupilGroup.position.z = 0.06;
+            socket.add(pupilGroup);
 
-        // Eyelid for blinking
-        const leftEyelid = new THREE.Mesh(
-            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-            materialEyelid
-        );
-        leftEyelid.rotation.x = Math.PI;
-        leftEyelid.position.z = 0.01;
-        leftEyelid.scale.z = 0.5;
-        leftEyelid.visible = false;
-        leftEyeSocket.add(leftEyelid);
+            // Pupil - vertical slit
+            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 16), materialPupil);
+            pupil.scale.set(0.4, 1.1, 0.15);
+            pupilGroup.add(pupil);
 
-        // Right eye (mirror of left)
-        const rightEyeSocket = new THREE.Group();
-        rightEyeSocket.position.set(-0.26, 0.1, 0.5);
-        eyeGroup.add(rightEyeSocket);
+            // Eye highlights (anime-style sparkles)
+            const highlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), materialEyeHighlight);
+            highlight1.position.set(isLeft ? 0.05 : -0.05, 0.07, 0.07);
+            socket.add(highlight1);
 
-        const rightEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), materialEyeWhite);
-        rightEyeWhite.scale.z = 0.4;
-        rightEyeSocket.add(rightEyeWhite);
+            const highlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), materialEyeHighlight);
+            highlight2.position.set(isLeft ? -0.02 : 0.02, -0.03, 0.07);
+            socket.add(highlight2);
 
-        const rightIris = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 24), materialIris);
-        rightIris.position.z = 0.04;
-        rightIris.scale.z = 0.3;
-        rightEyeSocket.add(rightIris);
+            // Third small highlight for extra sparkle
+            const highlight3 = new THREE.Mesh(new THREE.SphereGeometry(0.015, 6, 6), materialEyeHighlight);
+            highlight3.position.set(isLeft ? 0.06 : -0.06, -0.01, 0.075);
+            socket.add(highlight3);
 
-        const rightPupilGroup = new THREE.Group();
-        rightPupilGroup.position.z = 0.06;
-        rightEyeSocket.add(rightPupilGroup);
+            // Top eyelid for blinking
+            const topEyelid = new THREE.Mesh(
+                new THREE.SphereGeometry(0.20, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+                materialEyelid
+            );
+            topEyelid.rotation.x = Math.PI;
+            topEyelid.position.z = 0.01;
+            topEyelid.scale.z = 0.5;
+            topEyelid.visible = false;
+            socket.add(topEyelid);
 
-        const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), materialPupil);
-        rightPupil.scale.set(0.5, 1, 0.2);
-        rightPupilGroup.add(rightPupil);
+            // Bottom eyelid for squinting/expressions
+            const bottomEyelid = new THREE.Mesh(
+                new THREE.SphereGeometry(0.20, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+                materialBottomLid
+            );
+            bottomEyelid.rotation.x = 0;
+            bottomEyelid.position.set(0, -0.02, 0.01);
+            bottomEyelid.scale.set(1, 0.6, 0.5);
+            bottomEyelid.visible = false;
+            socket.add(bottomEyelid);
 
-        const rightHighlight1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), materialEyeHighlight);
-        rightHighlight1.position.set(0.05, 0.06, 0.07);
-        rightEyeSocket.add(rightHighlight1);
+            return {
+                socket,
+                eyeWhite,
+                iris,
+                innerIris,
+                limbalRing,
+                pupilGroup,
+                pupil,
+                highlights: [highlight1, highlight2, highlight3],
+                topEyelid,
+                bottomEyelid
+            };
+        }
 
-        const rightHighlight2 = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), materialEyeHighlight);
-        rightHighlight2.position.set(-0.03, -0.04, 0.07);
-        rightEyeSocket.add(rightHighlight2);
+        // Create both eyes
+        const leftEye = createDetailedEye(0.26, true);
+        const rightEye = createDetailedEye(-0.26, false);
 
-        const rightEyelid = new THREE.Mesh(
-            new THREE.SphereGeometry(0.19, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-            materialEyelid
-        );
-        rightEyelid.rotation.x = Math.PI;
-        rightEyelid.position.z = 0.01;
-        rightEyelid.scale.z = 0.5;
-        rightEyelid.visible = false;
-        rightEyeSocket.add(rightEyelid);
-
+        eyeGroup.add(leftEye.socket);
+        eyeGroup.add(rightEye.socket);
         headGroup.add(eyeGroup);
+
+        // Aliases for backward compatibility
+        const leftEyeSocket = leftEye.socket;
+        const rightEyeSocket = rightEye.socket;
+        const leftEyeWhite = leftEye.eyeWhite;
+        const rightEyeWhite = rightEye.eyeWhite;
+        const leftIris = leftEye.iris;
+        const rightIris = rightEye.iris;
+        const leftPupilGroup = leftEye.pupilGroup;
+        const rightPupilGroup = rightEye.pupilGroup;
+        const leftPupil = leftEye.pupil;
+        const rightPupil = rightEye.pupil;
+        const leftEyelid = leftEye.topEyelid;
+        const rightEyelid = rightEye.topEyelid;
+        const leftBottomLid = leftEye.bottomEyelid;
+        const rightBottomLid = rightEye.bottomEyelid;
 
         // Eye state for blinking and expressions
         let blinkTimer = 0;
         let isBlinking = false;
         let blinkProgress = 0;
+        let blinkType = 'normal'; // 'normal', 'slow', 'double', 'sleepy'
         let pupilDilation = 1.0; // 1.0 = normal, 0.5 = dilated (excited), 1.5 = slits (bright/alert)
+        let eyeLookTarget = new THREE.Vector3(0, 0, 1); // Direction eyes are looking
+        let currentEyeLook = new THREE.Vector3(0, 0, 1);
+
+        // Expression state
+        let currentExpression = 'neutral';
+        let expressionIntensity = 0;
+        let targetTopLidClose = 0; // 0 = open, 1 = closed
+        let targetBottomLidClose = 0; // 0 = open, 1 = raised (squint)
+        let currentTopLidClose = 0;
+        let currentBottomLidClose = 0;
+
+        // Expression presets
+        const expressions = {
+            neutral: { topLid: 0, bottomLid: 0, pupilScale: 1.0 },
+            happy: { topLid: 0.3, bottomLid: 0.5, pupilScale: 0.8 },
+            sleepy: { topLid: 0.6, bottomLid: 0.2, pupilScale: 0.7 },
+            excited: { topLid: 0, bottomLid: 0, pupilScale: 0.5 },
+            alert: { topLid: 0, bottomLid: 0, pupilScale: 1.4 },
+            surprised: { topLid: 0, bottomLid: 0, pupilScale: 0.4 },
+            focused: { topLid: 0.15, bottomLid: 0.1, pupilScale: 1.2 },
+            content: { topLid: 0.4, bottomLid: 0.4, pupilScale: 0.6 },
+            angry: { topLid: 0.3, bottomLid: 0.3, pupilScale: 1.3 }
+        };
+
+        // Set expression function
+        function setExpression(name, intensity = 1.0) {
+            if (expressions[name]) {
+                currentExpression = name;
+                expressionIntensity = intensity;
+                const expr = expressions[name];
+                targetTopLidClose = expr.topLid * intensity;
+                targetBottomLidClose = expr.bottomLid * intensity;
+                pupilDilation = THREE.MathUtils.lerp(1.0, expr.pupilScale, intensity);
+            }
+        }
+
+        // Make eyes look at a world position
+        function lookAtPosition(worldPos) {
+            // Convert world position to local head space direction
+            const headWorldPos = new THREE.Vector3();
+            headGroup.getWorldPosition(headWorldPos);
+            eyeLookTarget.copy(worldPos).sub(headWorldPos).normalize();
+        }
 
         // === NOSE - Cute pink triangle ===
         const noseGeo = new THREE.SphereGeometry(0.08, 12, 12);
@@ -920,84 +1137,389 @@
 
         headGroup.add(mPatternGroup);
 
-        // === LEGS - Chubbier and cuter ===
+        // === LEGS - Realistic cat anatomy ===
+        // Cats have digitigrade legs (walk on toes)
+        // Front legs: shoulder -> elbow -> wrist -> paw
+        // Back legs: hip -> knee(stifle) -> hock -> metatarsus -> paw
         const legs = [];
-        const upperLegGeo = new THREE.CapsuleGeometry(0.1, 0.3, 8, 12);
-        const lowerLegGeo = new THREE.CapsuleGeometry(0.09, 0.28, 8, 12);
-        const pawGeo = new THREE.SphereGeometry(0.13, 16, 16);
-        const pawPadGeo = new THREE.SphereGeometry(0.045, 8, 8);
-        const toeGeo = new THREE.SphereGeometry(0.025, 6, 6);
 
-        function createLeg(x, z, name) {
+        // Geometry for different leg segments
+        const frontUpperGeo = new THREE.CapsuleGeometry(0.09, 0.25, 8, 12);  // Upper arm
+        const frontLowerGeo = new THREE.CapsuleGeometry(0.075, 0.28, 8, 12); // Forearm
+        const frontPawGeo = new THREE.SphereGeometry(0.11, 16, 16);
+
+        const backThighGeo = new THREE.CapsuleGeometry(0.12, 0.28, 8, 12);   // Thigh - muscular
+        const backShinGeo = new THREE.CapsuleGeometry(0.08, 0.25, 8, 12);    // Lower leg
+        const backMetaGeo = new THREE.CapsuleGeometry(0.055, 0.18, 6, 8);    // Metatarsus (long foot bone)
+        const backPawGeo = new THREE.SphereGeometry(0.10, 16, 16);
+
+        const pawPadGeo = new THREE.SphereGeometry(0.04, 8, 8);
+        const toeGeo = new THREE.SphereGeometry(0.022, 6, 6);
+
+        // Create front leg with proper cat anatomy
+        function createFrontLeg(x, z, name) {
+            // Shoulder joint - attaches to body
+            const shoulderJoint = new THREE.Group();
+            shoulderJoint.position.set(x, 0.9, z);
+
+            // Upper arm (humerus) - short, angled back slightly
+            const upperArm = new THREE.Mesh(frontUpperGeo, materialFur);
+            upperArm.position.y = -0.15;
+            upperArm.castShadow = true;
+            shoulderJoint.add(upperArm);
+
+            // Elbow joint - bends backward
+            const elbowJoint = new THREE.Group();
+            elbowJoint.position.y = -0.32;
+            shoulderJoint.add(elbowJoint);
+
+            // Forearm (radius/ulna) - longer, goes down
+            const forearm = new THREE.Mesh(frontLowerGeo, materialFur);
+            forearm.position.y = -0.16;
+            forearm.castShadow = true;
+            elbowJoint.add(forearm);
+
+            // Wrist joint (carpus)
+            const wristJoint = new THREE.Group();
+            wristJoint.position.y = -0.35;
+            elbowJoint.add(wristJoint);
+
+            // Paw
+            const paw = new THREE.Mesh(frontPawGeo, materialFur);
+            paw.scale.set(1.1, 0.45, 1.3);
+            paw.position.y = -0.02;
+            paw.castShadow = true;
+            wristJoint.add(paw);
+
+            // Paw pads
+            const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
+            mainPad.position.set(0, -0.03, 0.03);
+            mainPad.scale.set(1.6, 0.5, 1.3);
+            wristJoint.add(mainPad);
+
+            // Toe beans
+            [[-0.05, -0.03, 0.09], [-0.017, -0.03, 0.11], [0.017, -0.03, 0.11], [0.05, -0.03, 0.09]].forEach(pos => {
+                const toe = new THREE.Mesh(toeGeo, materialPawPad);
+                toe.position.set(...pos);
+                toe.scale.set(1, 0.6, 1);
+                wristJoint.add(toe);
+            });
+
+            kittenGroup.add(shoulderJoint);
+
+            return {
+                root: shoulderJoint,
+                shoulder: shoulderJoint,
+                elbow: elbowJoint,
+                wrist: wristJoint,
+                name: name,
+                isFront: true,
+                // Rest pose angles (standing naturally) - more visible bend
+                restPose: { shoulder: 0.15, elbow: -0.35, wrist: 0.2 },
+                // Current animation targets
+                targetPose: { shoulder: 0.15, elbow: -0.35, wrist: 0.2 },
+                currentPose: { shoulder: 0.15, elbow: -0.35, wrist: 0.2 }
+            };
+        }
+
+        // Create back leg with realistic digitigrade anatomy
+        function createBackLeg(x, z, name) {
+            // Hip joint
             const hipJoint = new THREE.Group();
-            hipJoint.position.set(x, 0.85, z);
+            hipJoint.position.set(x, 0.95, z);
 
-            // Upper leg (thigh)
-            const upperLeg = new THREE.Mesh(upperLegGeo, materialFur);
-            upperLeg.position.y = -0.18;
-            upperLeg.castShadow = true;
-            hipJoint.add(upperLeg);
+            // Thigh (femur) - angles forward, muscular
+            const thigh = new THREE.Mesh(backThighGeo, materialFur);
+            thigh.position.y = -0.18;
+            thigh.castShadow = true;
+            hipJoint.add(thigh);
 
-            // Knee joint
+            // Knee joint (stifle) - the forward-bending joint
             const kneeJoint = new THREE.Group();
             kneeJoint.position.y = -0.38;
             hipJoint.add(kneeJoint);
 
-            // Lower leg
-            const lowerLeg = new THREE.Mesh(lowerLegGeo, materialFur);
-            lowerLeg.position.y = -0.18;
-            lowerLeg.castShadow = true;
-            kneeJoint.add(lowerLeg);
+            // Lower leg (tibia) - angles backward to hock
+            const shin = new THREE.Mesh(backShinGeo, materialFur);
+            shin.position.y = -0.15;
+            shin.castShadow = true;
+            kneeJoint.add(shin);
 
-            // Ankle joint
-            const ankleJoint = new THREE.Group();
-            ankleJoint.position.y = -0.38;
-            kneeJoint.add(ankleJoint);
+            // Hock joint (tarsus) - the prominent backward-bending joint
+            // This is what makes cat back legs look distinctive
+            const hockJoint = new THREE.Group();
+            hockJoint.position.y = -0.32;
+            kneeJoint.add(hockJoint);
 
-            // Paw - rounder and cuter
-            const paw = new THREE.Mesh(pawGeo, materialFur);
-            paw.scale.set(1.2, 0.5, 1.4);
+            // Metatarsus - the long foot bone, angles forward to ground
+            const metatarsus = new THREE.Mesh(backMetaGeo, materialFur);
+            metatarsus.position.y = -0.12;
+            metatarsus.castShadow = true;
+            hockJoint.add(metatarsus);
+
+            // Ankle/paw joint
+            const pawJoint = new THREE.Group();
+            pawJoint.position.y = -0.22;
+            hockJoint.add(pawJoint);
+
+            // Paw (smaller than front)
+            const paw = new THREE.Mesh(backPawGeo, materialFur);
+            paw.scale.set(1.0, 0.4, 1.2);
+            paw.position.y = -0.01;
             paw.castShadow = true;
-            ankleJoint.add(paw);
+            pawJoint.add(paw);
 
-            // Main paw pad (big pink bean)
+            // Paw pads
             const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
-            mainPad.position.set(0, -0.04, 0.04);
-            mainPad.scale.set(1.8, 0.5, 1.4);
-            ankleJoint.add(mainPad);
+            mainPad.position.set(0, -0.025, 0.025);
+            mainPad.scale.set(1.4, 0.5, 1.2);
+            pawJoint.add(mainPad);
 
-            // Toe beans! (4 little pink beans)
-            const toePositions = [
-                [-0.06, -0.04, 0.11],
-                [-0.02, -0.04, 0.13],
-                [0.02, -0.04, 0.13],
-                [0.06, -0.04, 0.11]
-            ];
-            toePositions.forEach(pos => {
+            // Toe beans
+            [[-0.04, -0.025, 0.07], [-0.013, -0.025, 0.085], [0.013, -0.025, 0.085], [0.04, -0.025, 0.07]].forEach(pos => {
                 const toe = new THREE.Mesh(toeGeo, materialPawPad);
                 toe.position.set(...pos);
                 toe.scale.set(1, 0.6, 1);
-                ankleJoint.add(toe);
+                pawJoint.add(toe);
             });
 
             kittenGroup.add(hipJoint);
-            legs.push({
-                mesh: hipJoint,
+
+            return {
+                root: hipJoint,
+                hip: hipJoint,
                 knee: kneeJoint,
-                ankle: ankleJoint,
-                name: name
-            });
-            return hipJoint;
+                hock: hockJoint,
+                paw: pawJoint,
+                name: name,
+                isFront: false,
+                // Rest pose - the characteristic cat back leg stance
+                // Hip forward, knee bent forward, hock bent back, creating the "Z" shape
+                restPose: { hip: 0.35, knee: -0.7, hock: 0.9, paw: -0.2 },
+                targetPose: { hip: 0.35, knee: -0.7, hock: 0.9, paw: -0.2 },
+                currentPose: { hip: 0.35, knee: -0.7, hock: 0.9, paw: -0.2 }
+            };
         }
 
-        const legFL = createLeg(0.32, 0.45, 'FL');
-        const legFR = createLeg(-0.32, 0.45, 'FR');
-        const legBL = createLeg(0.32, -0.45, 'BL');
-        const legBR = createLeg(-0.32, -0.45, 'BR');
+        // Create all four legs
+        const legFL = createFrontLeg(0.28, 0.4, 'FL');
+        const legFR = createFrontLeg(-0.28, 0.4, 'FR');
+        const legBL = createBackLeg(0.26, -0.4, 'BL');
+        const legBR = createBackLeg(-0.26, -0.4, 'BR');
+
+        legs.push(legFL, legFR, legBL, legBR);
+
+        // Apply rest pose to all legs initially
+        function applyLegPose(leg) {
+            if (leg.isFront) {
+                leg.shoulder.rotation.x = leg.currentPose.shoulder;
+                leg.elbow.rotation.x = leg.currentPose.elbow;
+                leg.wrist.rotation.x = leg.currentPose.wrist;
+            } else {
+                leg.hip.rotation.x = leg.currentPose.hip;
+                leg.knee.rotation.x = leg.currentPose.knee;
+                leg.hock.rotation.x = leg.currentPose.hock;
+                leg.paw.rotation.x = leg.currentPose.paw;
+            }
+        }
+
+        // Smoothly interpolate leg poses
+        function updateLegPose(leg, dt, speed = 8) {
+            if (leg.isFront) {
+                leg.currentPose.shoulder = THREE.MathUtils.lerp(leg.currentPose.shoulder, leg.targetPose.shoulder, speed * dt);
+                leg.currentPose.elbow = THREE.MathUtils.lerp(leg.currentPose.elbow, leg.targetPose.elbow, speed * dt);
+                leg.currentPose.wrist = THREE.MathUtils.lerp(leg.currentPose.wrist, leg.targetPose.wrist, speed * dt);
+            } else {
+                leg.currentPose.hip = THREE.MathUtils.lerp(leg.currentPose.hip, leg.targetPose.hip, speed * dt);
+                leg.currentPose.knee = THREE.MathUtils.lerp(leg.currentPose.knee, leg.targetPose.knee, speed * dt);
+                leg.currentPose.hock = THREE.MathUtils.lerp(leg.currentPose.hock, leg.targetPose.hock, speed * dt);
+                leg.currentPose.paw = THREE.MathUtils.lerp(leg.currentPose.paw, leg.targetPose.paw, speed * dt);
+            }
+            applyLegPose(leg);
+        }
+
+        // Walking gait - diagonal pairs move together
+        // phase: 0-1 represents one full stride cycle
+        function getWalkPose(leg, phase, amplitude = 1.0) {
+            // Offset phase for diagonal gait (FL+BR, FR+BL)
+            let legPhase = phase;
+            if (leg.name === 'FR' || leg.name === 'BL') {
+                legPhase = (phase + 0.5) % 1.0;
+            }
+
+            // Convert to -PI to PI for sine calculations
+            const cycleAngle = legPhase * Math.PI * 2;
+
+            // Swing phase (leg in air): 0.0-0.3
+            // Stance phase (leg on ground): 0.3-1.0
+            const swingDuration = 0.3;
+            const isSwing = legPhase < swingDuration;
+
+            if (leg.isFront) {
+                if (isSwing) {
+                    // Swing forward - lift paw, extend leg
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI); // Smooth arc up and down
+                    return {
+                        shoulder: (0.25 - swingProgress * 0.5) * amplitude,
+                        elbow: (-0.3 - lift * 0.4) * amplitude,
+                        wrist: (0.1 + lift * 0.3) * amplitude
+                    };
+                } else {
+                    // Stance - push back
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        shoulder: (-0.25 + stanceProgress * 0.5) * amplitude,
+                        elbow: -0.15 * amplitude,
+                        wrist: 0.05 * amplitude
+                    };
+                }
+            } else {
+                // Back leg - more complex motion with hock
+                if (isSwing) {
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI);
+                    return {
+                        hip: (0.5 - swingProgress * 0.4) * amplitude,
+                        knee: (-0.9 - lift * 0.3) * amplitude,
+                        hock: (1.1 + lift * 0.4) * amplitude,
+                        paw: (-0.3 - lift * 0.2) * amplitude
+                    };
+                } else {
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        hip: (0.1 + stanceProgress * 0.4) * amplitude,
+                        knee: -0.7 * amplitude,
+                        hock: 0.9 * amplitude,
+                        paw: -0.2 * amplitude
+                    };
+                }
+            }
+        }
+
+        // Running gait - faster, more extended
+        function getRunPose(leg, phase, amplitude = 1.0) {
+            let legPhase = phase;
+            if (leg.name === 'FR' || leg.name === 'BL') {
+                legPhase = (phase + 0.5) % 1.0;
+            }
+
+            const swingDuration = 0.4; // Longer swing phase when running
+            const isSwing = legPhase < swingDuration;
+
+            if (leg.isFront) {
+                if (isSwing) {
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI);
+                    return {
+                        shoulder: (0.4 - swingProgress * 0.8) * amplitude,
+                        elbow: (-0.4 - lift * 0.5) * amplitude,
+                        wrist: (0.15 + lift * 0.4) * amplitude
+                    };
+                } else {
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        shoulder: (-0.4 + stanceProgress * 0.8) * amplitude,
+                        elbow: -0.2 * amplitude,
+                        wrist: 0.05 * amplitude
+                    };
+                }
+            } else {
+                if (isSwing) {
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI);
+                    return {
+                        hip: (0.7 - swingProgress * 0.6) * amplitude,
+                        knee: (-1.1 - lift * 0.4) * amplitude,
+                        hock: (1.4 + lift * 0.5) * amplitude,
+                        paw: (-0.4 - lift * 0.3) * amplitude
+                    };
+                } else {
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        hip: (0.1 + stanceProgress * 0.6) * amplitude,
+                        knee: -0.8 * amplitude,
+                        hock: 1.0 * amplitude,
+                        paw: -0.2 * amplitude
+                    };
+                }
+            }
+        }
+
+        // Crouching pose for hunting/stalking
+        function getCrouchPose(leg) {
+            if (leg.isFront) {
+                return { shoulder: 0.3, elbow: -0.5, wrist: 0.2 };
+            } else {
+                return { hip: 0.6, knee: -1.0, hock: 1.3, paw: -0.3 };
+            }
+        }
+
+        // Sitting pose
+        function getSitPose(leg) {
+            if (leg.isFront) {
+                return { shoulder: 0.1, elbow: -0.4, wrist: 0.3 };
+            } else {
+                // Back legs tucked under when sitting
+                return { hip: 1.2, knee: -1.8, hock: 1.5, paw: -0.4 };
+            }
+        }
+
+        // Stretching pose
+        function getStretchPose(leg, stretchPhase) {
+            if (leg.isFront) {
+                // Front legs extend forward
+                return {
+                    shoulder: -0.3 + Math.sin(stretchPhase) * 0.2,
+                    elbow: 0.1,
+                    wrist: -0.1
+                };
+            } else {
+                // Back legs extend back
+                return {
+                    hip: -0.2 + Math.sin(stretchPhase) * 0.1,
+                    knee: -0.3,
+                    hock: 0.5,
+                    paw: -0.1
+                };
+            }
+        }
+
+        // Set target pose for a leg
+        function setLegTarget(leg, pose) {
+            if (leg.isFront) {
+                leg.targetPose.shoulder = pose.shoulder;
+                leg.targetPose.elbow = pose.elbow;
+                leg.targetPose.wrist = pose.wrist;
+            } else {
+                leg.targetPose.hip = pose.hip;
+                leg.targetPose.knee = pose.knee;
+                leg.targetPose.hock = pose.hock;
+                leg.targetPose.paw = pose.paw;
+            }
+        }
+
+        // Initialize all legs to rest pose
+        legs.forEach(leg => {
+            if (leg.isFront) {
+                leg.currentPose = { ...leg.restPose };
+                leg.targetPose = { ...leg.restPose };
+            } else {
+                leg.currentPose = { ...leg.restPose };
+                leg.targetPose = { ...leg.restPose };
+            }
+            applyLegPose(leg);
+        });
+
+        // Animation state for legs
+        let walkCycle = 0;
+        let legAnimSpeed = 3; // Cycles per second
 
         // Tail - fluffy and expressive
         const tailGroup = new THREE.Group();
         tailGroup.position.set(0, 1.1, -0.6);
+        // Point tail outward/upward by default so it doesn't clip into body
+        tailGroup.rotation.x = -0.4;
         kittenGroup.add(tailGroup);
 
         const tailSegments = [];
@@ -1359,8 +1881,9 @@
             food: new THREE.Vector3(-7, 0, 4),
             water: new THREE.Vector3(-5.8, 0, 4),
             scratchPost: new THREE.Vector3(6, 0, -4),
-            sunbeam: new THREE.Vector3(5, 0, 2),
-            center: new THREE.Vector3(0, 0, 0)
+            sunbeam: new THREE.Vector3(-9, 0, 1),
+            center: new THREE.Vector3(0, 0, 0),
+            window: new THREE.Vector3(-13, 0, 0)
         };
 
         const stateEmojis = {
@@ -1380,7 +1903,10 @@
             'SUNBATHE': '☀️ Sunbathing',
             'ZOOMIES': '⚡ ZOOMIES!',
             'ROLLOVER': '🙃 Rolling Over',
-            'CURIOUS': '🔍 Curious'
+            'CURIOUS': '🔍 Curious',
+            'WINDOW_WATCH': '🪟 Watching Birds',
+            'JUMP_BAT': '🐾 Batting Toy',
+            'RUB': '😸 Rubbing'
         };
 
         function setState(newState, goal = null) {
@@ -1476,6 +2002,14 @@
                 return;
             }
 
+            // Window watching - cats love looking at birds!
+            if (windowOpen && rand < 0.15) {
+                setState('WALK', 'window');
+                targetPos.copy(locations.window);
+                stateTimer = 10;
+                return;
+            }
+
             // Fun activities based on energy level
             if (stats.energy > 60) {
                 // ZOOMIES! Random sudden burst of energy (10% chance when high energy)
@@ -1494,7 +2028,24 @@
                 }
 
                 if (rand < 0.15) {
+                    // Go to scratching post for various activities
                     setState('WALK', 'scratch');
+                    targetPos.copy(locations.scratchPost);
+                    stateTimer = 8;
+                    return;
+                }
+
+                // Jump and bat at dangling toy (high energy activity)
+                if (rand < 0.12 && stats.energy > 70) {
+                    setState('WALK', 'jumpbat');
+                    targetPos.copy(locations.scratchPost);
+                    stateTimer = 8;
+                    return;
+                }
+
+                // Rub affectionately against the post
+                if (rand < 0.1) {
+                    setState('WALK', 'rub');
                     targetPos.copy(locations.scratchPost);
                     stateTimer = 8;
                     return;
@@ -1588,7 +2139,14 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
-            // First check if clicking on a toy to drag it
+            // First check if clicking on window to open/close it
+            const windowIntersects = raycaster.intersectObjects([windowPanes.left, windowPanes.right], false);
+            if (windowIntersects.length > 0) {
+                toggleWindow();
+                return;
+            }
+
+            // Check if clicking on a toy to drag it
             const toyMeshes = toys.map(t => t.mesh);
             const toyIntersects = raycaster.intersectObjects(toyMeshes, true);
             if (toyIntersects.length > 0) {
@@ -1601,8 +2159,9 @@
                 if (clickedToy) {
                     draggedToy = clickedToy;
                     draggedToy.velocity.set(0, 0, 0);
-                    // Kitten notices!
-                    if (state === 'IDLE' || state === 'WALK') {
+                    // Kitten might notice (30% chance if idle, less if busy)
+                    const noticeChance = (state === 'IDLE') ? 0.3 : (state === 'WALK') ? 0.15 : 0;
+                    if (Math.random() < noticeChance) {
                         targetToy = draggedToy;
                         setState('HUNT', 'toy');
                         stateTimer = 10;
@@ -1629,7 +2188,8 @@
                 if (pos) {
                     laserDot.position.set(pos.x, 0.02, pos.z);
                     laserDot.visible = true;
-                    if (state !== 'SLEEP') {
+                    // Laser is hard to resist but not always immediate (70% chance)
+                    if (state !== 'SLEEP' && Math.random() < 0.7) {
                         setState('LASER');
                         targetPos.copy(pos);
                         currentSpeed = runSpeed;
@@ -1639,7 +2199,9 @@
                 const pos = getFloorIntersection(event);
                 if (pos) {
                     spawnTreat(pos.x, pos.z);
-                    if (state === 'IDLE' || state === 'WALK') {
+                    // Only notice treat sometimes (40% if idle, 20% otherwise)
+                    const treatNotice = (state === 'IDLE') ? 0.4 : (state === 'WALK') ? 0.2 : 0.1;
+                    if (Math.random() < treatNotice) {
                         setState('WALK', 'food');
                         targetPos.copy(pos);
                         stateTimer = 10;
@@ -1652,8 +2214,9 @@
                     specialYarn.mesh.position.set(pos.x, 0.35, pos.z);
                     specialYarn.velocity.set(0, 0, 0);
                     draggedToy = specialYarn;
-                    // Kitten notices the yarn!
-                    if (state !== 'SLEEP' && state !== 'PET') {
+                    // Kitten might notice the yarn (50% chance if not busy)
+                    const yarnNotice = (state === 'IDLE') ? 0.5 : (state === 'WALK') ? 0.3 : 0.1;
+                    if (state !== 'SLEEP' && Math.random() < yarnNotice) {
                         targetToy = specialYarn;
                         setState('HUNT', 'toy');
                         stateTimer = 10;
@@ -1841,42 +2404,79 @@
                 dust.mesh.position.x += dust.driftX * dt * 0.05;
                 dust.mesh.position.z += dust.driftZ * dt * 0.05;
 
-                // Wrap around within sunbeam area
-                if (dust.mesh.position.x > 7) dust.mesh.position.x = 3;
-                if (dust.mesh.position.x < 3) dust.mesh.position.x = 7;
-                if (dust.mesh.position.z > 4) dust.mesh.position.z = 0;
-                if (dust.mesh.position.z < 0) dust.mesh.position.z = 4;
+                // Wrap around within sunbeam area near window
+                if (dust.mesh.position.x > -8) dust.mesh.position.x = -12;
+                if (dust.mesh.position.x < -12) dust.mesh.position.x = -8;
+                if (dust.mesh.position.z > 2) dust.mesh.position.z = -2;
+                if (dust.mesh.position.z < -2) dust.mesh.position.z = 2;
             });
 
-            // === KITTEN BLINKING ===
+            // === KITTEN BLINKING AND EXPRESSIONS ===
             blinkTimer -= dt;
             if (blinkTimer <= 0 && !isBlinking) {
-                // Start a blink randomly every 2-6 seconds
+                // Start a blink with random type
                 isBlinking = true;
                 blinkProgress = 0;
-                blinkTimer = 2 + Math.random() * 4;
+
+                // Choose blink type based on state
+                const rand = Math.random();
+                if (state === 'SLEEP' || state === 'SUNBATHE' || stats.energy < 30) {
+                    blinkType = rand < 0.4 ? 'slow' : (rand < 0.7 ? 'sleepy' : 'normal');
+                    blinkTimer = 1.5 + Math.random() * 2;
+                } else if (state === 'PET' || state === 'GROOM') {
+                    blinkType = rand < 0.3 ? 'slow' : 'normal';
+                    blinkTimer = 2 + Math.random() * 3;
+                } else {
+                    blinkType = rand < 0.15 ? 'double' : 'normal';
+                    blinkTimer = 2.5 + Math.random() * 4;
+                }
             }
 
+            // Animate blink based on type
             if (isBlinking) {
-                blinkProgress += dt * 8; // Blink speed
-                if (blinkProgress < 1) {
-                    // Closing
-                    const closeAmount = blinkProgress;
-                    leftEyelid.visible = true;
-                    rightEyelid.visible = true;
-                    leftEyelid.scale.y = closeAmount;
-                    rightEyelid.scale.y = closeAmount;
-                    leftEyeWhite.scale.y = 1 - closeAmount * 0.8;
-                    rightEyeWhite.scale.y = 1 - closeAmount * 0.8;
-                } else if (blinkProgress < 2) {
-                    // Opening
-                    const openAmount = blinkProgress - 1;
-                    leftEyelid.scale.y = 1 - openAmount;
-                    rightEyelid.scale.y = 1 - openAmount;
-                    leftEyeWhite.scale.y = 0.2 + openAmount * 0.8;
-                    rightEyeWhite.scale.y = 0.2 + openAmount * 0.8;
+                const blinkSpeed = blinkType === 'slow' ? 4 : (blinkType === 'sleepy' ? 3 : 8);
+                const maxProgress = blinkType === 'double' ? 3.5 : 2;
+                blinkProgress += dt * blinkSpeed;
+
+                let effectiveClose = 0;
+                if (blinkType === 'double') {
+                    // Double blink pattern
+                    if (blinkProgress < 0.8) {
+                        effectiveClose = Math.sin(blinkProgress / 0.8 * Math.PI);
+                    } else if (blinkProgress < 1.5) {
+                        effectiveClose = 0;
+                    } else if (blinkProgress < 2.3) {
+                        effectiveClose = Math.sin((blinkProgress - 1.5) / 0.8 * Math.PI);
+                    } else {
+                        effectiveClose = 0;
+                    }
+                } else if (blinkType === 'sleepy') {
+                    // Slow, heavy blink - eyes stay partially closed longer
+                    if (blinkProgress < 1) {
+                        effectiveClose = blinkProgress;
+                    } else if (blinkProgress < 1.5) {
+                        effectiveClose = 1; // Hold closed
+                    } else {
+                        effectiveClose = Math.max(0, 2.5 - blinkProgress);
+                    }
                 } else {
-                    // Done blinking
+                    // Normal or slow blink
+                    if (blinkProgress < 1) {
+                        effectiveClose = blinkProgress;
+                    } else {
+                        effectiveClose = Math.max(0, 2 - blinkProgress);
+                    }
+                }
+
+                // Apply blink to eyelids
+                leftEyelid.visible = effectiveClose > 0.05;
+                rightEyelid.visible = effectiveClose > 0.05;
+                leftEyelid.scale.y = effectiveClose;
+                rightEyelid.scale.y = effectiveClose;
+                leftEyeWhite.scale.y = 1 - effectiveClose * 0.85;
+                rightEyeWhite.scale.y = 1 - effectiveClose * 0.85;
+
+                if (blinkProgress >= maxProgress) {
                     isBlinking = false;
                     leftEyelid.visible = false;
                     rightEyelid.visible = false;
@@ -1885,16 +2485,88 @@
                 }
             }
 
+            // === EXPRESSION SYSTEM ===
+            // Set expression based on state
+            if (state === 'PET') {
+                setExpression('happy', 0.8);
+            } else if (state === 'SLEEP') {
+                setExpression('sleepy', 1.0);
+            } else if (state === 'HUNT') {
+                setExpression('focused', 0.7);
+            } else if (state === 'PLAY' || state === 'LASER' || state === 'ZOOMIES') {
+                setExpression('excited', 0.9);
+            } else if (state === 'SUNBATHE' || state === 'GROOM') {
+                setExpression('content', 0.6);
+            } else if (state === 'CURIOUS') {
+                setExpression('alert', 0.5);
+            } else {
+                setExpression('neutral', 0.3);
+            }
+
+            // Smoothly interpolate expression
+            currentTopLidClose = THREE.MathUtils.lerp(currentTopLidClose, targetTopLidClose, 4 * dt);
+            currentBottomLidClose = THREE.MathUtils.lerp(currentBottomLidClose, targetBottomLidClose, 4 * dt);
+
+            // Apply expression to bottom eyelids (when not blinking)
+            if (!isBlinking && currentBottomLidClose > 0.05) {
+                leftBottomLid.visible = true;
+                rightBottomLid.visible = true;
+                leftBottomLid.scale.y = 0.6 * currentBottomLidClose;
+                rightBottomLid.scale.y = 0.6 * currentBottomLidClose;
+                leftBottomLid.position.y = -0.02 + currentBottomLidClose * 0.08;
+                rightBottomLid.position.y = -0.02 + currentBottomLidClose * 0.08;
+            } else if (!isBlinking) {
+                leftBottomLid.visible = false;
+                rightBottomLid.visible = false;
+            }
+
+            // Apply partial top lid close for expressions (when not actively blinking)
+            if (!isBlinking && currentTopLidClose > 0.05) {
+                leftEyelid.visible = true;
+                rightEyelid.visible = true;
+                leftEyelid.scale.y = currentTopLidClose * 0.7;
+                rightEyelid.scale.y = currentTopLidClose * 0.7;
+                leftEyeWhite.scale.y = 1 - currentTopLidClose * 0.5;
+                rightEyeWhite.scale.y = 1 - currentTopLidClose * 0.5;
+            }
+
+            // === EYE TRACKING ===
+            // Find something interesting to look at
+            const nearToy = findNearestToy(8);
+            if (nearToy && (state === 'IDLE' || state === 'HUNT' || state === 'CURIOUS')) {
+                lookAtPosition(nearToy.mesh.position);
+            } else if (laserDot.visible) {
+                lookAtPosition(laserDot.position);
+            } else {
+                // Default look forward
+                eyeLookTarget.set(0, 0, 1);
+            }
+
+            // Smooth eye movement
+            currentEyeLook.lerp(eyeLookTarget, 5 * dt);
+
+            // Apply look direction to pupils (subtle movement)
+            const lookX = THREE.MathUtils.clamp(currentEyeLook.x * 0.03, -0.03, 0.03);
+            const lookY = THREE.MathUtils.clamp(currentEyeLook.y * 0.02, -0.02, 0.02);
+            leftPupilGroup.position.x = lookX;
+            leftPupilGroup.position.y = lookY;
+            rightPupilGroup.position.x = lookX;
+            rightPupilGroup.position.y = lookY;
+
             // Pupil dilation based on state/environment
             let targetDilation = 1.0;
             if (state === 'HUNT' || state === 'PLAY' || state === 'LASER') {
                 targetDilation = 1.8; // Dilated (excited)
             } else if (state === 'SLEEP' || state === 'SUNBATHE') {
                 targetDilation = 0.6; // Relaxed slits
+            } else if (state === 'ZOOMIES') {
+                targetDilation = 2.0; // Super dilated
+            } else if (state === 'CURIOUS') {
+                targetDilation = 1.5;
             }
             pupilDilation = THREE.MathUtils.lerp(pupilDilation, targetDilation, 2 * dt);
-            leftPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
-            rightPupil.scale.x = 0.5 * (2 - pupilDilation * 0.5);
+            leftPupil.scale.x = 0.4 * (2.2 - pupilDilation * 0.5);
+            rightPupil.scale.x = 0.4 * (2.2 - pupilDilation * 0.5);
 
             // Slowly decrease stats
             stats.happiness = Math.max(0, stats.happiness - dt * 0.5);
@@ -1933,12 +2605,10 @@
                 leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 1, 5 * dt);
                 rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 1, 5 * dt);
 
-                // Reset legs to standing pose
+                // Reset legs to standing pose with natural cat stance
                 legs.forEach(leg => {
-                    leg.mesh.rotation.x = THREE.MathUtils.lerp(leg.mesh.rotation.x, 0, 5 * dt);
-                    leg.mesh.rotation.z = THREE.MathUtils.lerp(leg.mesh.rotation.z, 0, 5 * dt);
-                    leg.knee.rotation.x = THREE.MathUtils.lerp(leg.knee.rotation.x, 0, 5 * dt);
-                    leg.ankle.rotation.x = THREE.MathUtils.lerp(leg.ankle.rotation.x, 0, 5 * dt);
+                    setLegTarget(leg, leg.restPose);
+                    updateLegPose(leg, dt, 5);
                 });
 
                 // Look at interesting things
@@ -1973,10 +2643,10 @@
                 // Slow breathing
                 bodyGroup.scale.set(1, 1 + Math.sin(time * 1.2) * 0.03, 1);
 
-                // Relax tail
+                // Relax tail - curl it around body but keep pointing outward
                 tailSegments.forEach((seg, i) => {
-                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.1, 2 * dt);
-                    seg.rotation.x = THREE.MathUtils.lerp(seg.rotation.x, 0.1, 2 * dt);
+                    seg.rotation.z = THREE.MathUtils.lerp(seg.rotation.z, 0.15 + i * 0.05, 2 * dt);
+                    seg.rotation.x = THREE.MathUtils.lerp(seg.rotation.x, -0.15, 2 * dt);
                 });
 
                 // Spawn Zzz
@@ -2020,6 +2690,15 @@
                     } else if (currentGoal === 'scratch') {
                         setState('SCRATCH');
                         stateTimer = 3 + Math.random() * 2;
+                    } else if (currentGoal === 'jumpbat') {
+                        setState('JUMP_BAT');
+                        stateTimer = 3;
+                    } else if (currentGoal === 'rub') {
+                        setState('RUB');
+                        stateTimer = 4;
+                    } else if (currentGoal === 'window') {
+                        setState('WINDOW_WATCH');
+                        stateTimer = 4 + Math.random() * 4;
                     } else {
                         setState('IDLE');
                         stateTimer = 0.5 + Math.random() * 1.5;
@@ -2038,26 +2717,24 @@
                     const speed = state === 'LASER' ? runSpeed : currentSpeed;
                     kittenGroup.position.add(direction.multiplyScalar(speed * dt));
 
-                    // Walk animation with articulated legs
-                    const legAmp = state === 'LASER' ? 0.5 : 0.35;
-                    const kneeAmp = state === 'LASER' ? 0.6 : 0.4;
-                    const legFreq = state === 'LASER' ? 15 : 10;
+                    // Realistic walk/run animation with proper gait
+                    const isRunning = state === 'LASER' || speed > walkSpeed * 1.5;
+                    legAnimSpeed = isRunning ? 5 : 3;
+                    walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
 
-                    // Front left, back right swing together
-                    const phase1 = Math.sin(time * legFreq);
-                    const phase2 = Math.cos(time * legFreq);
+                    // Apply proper gait animation to each leg
+                    legs.forEach(leg => {
+                        const pose = isRunning ? getRunPose(leg, walkCycle) : getWalkPose(leg, walkCycle);
+                        setLegTarget(leg, pose);
+                        updateLegPose(leg, dt, 12);
+                    });
 
-                    legs[0].mesh.rotation.x = phase1 * legAmp;
-                    legs[0].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
-                    legs[1].mesh.rotation.x = phase2 * legAmp;
-                    legs[1].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
-                    legs[2].mesh.rotation.x = phase2 * legAmp;
-                    legs[2].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
-                    legs[3].mesh.rotation.x = phase1 * legAmp;
-                    legs[3].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
+                    // Natural head bob synced with gait
+                    const bobPhase = Math.sin(walkCycle * Math.PI * 4);
+                    headGroup.position.y = 1.9 + bobPhase * (isRunning ? 0.06 : 0.03);
 
-                    // Head bob
-                    headGroup.position.y = 1.9 + Math.sin(time * legFreq * 2) * 0.04;
+                    // Subtle body sway
+                    bodyGroup.rotation.z = Math.sin(walkCycle * Math.PI * 2) * 0.02;
 
                     // Tail animation
                     tailSegments.forEach((seg, i) => {
@@ -2120,20 +2797,29 @@
             else if (state === 'GROOM') {
                 stateTimer -= dt;
 
-                // Sit pose
-                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
+                // Sit pose - lower body
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.2, 3 * dt);
 
-                // Bend back legs for sitting
-                legs[2].mesh.rotation.x = THREE.MathUtils.lerp(legs[2].mesh.rotation.x, -0.8, 3 * dt);
-                legs[2].knee.rotation.x = THREE.MathUtils.lerp(legs[2].knee.rotation.x, 1.2, 3 * dt);
-                legs[3].mesh.rotation.x = THREE.MathUtils.lerp(legs[3].mesh.rotation.x, -0.8, 3 * dt);
-                legs[3].knee.rotation.x = THREE.MathUtils.lerp(legs[3].knee.rotation.x, 1.2, 3 * dt);
+                // Back legs in sitting pose (tucked under)
+                const sitPoseBack = getSitPose(legBL);
+                setLegTarget(legBL, sitPoseBack);
+                setLegTarget(legBR, sitPoseBack);
+                updateLegPose(legBL, dt, 5);
+                updateLegPose(legBR, dt, 5);
 
-                // Lift front paw to face with bending
-                const groomLeg = legs[0];
-                groomLeg.mesh.rotation.x = THREE.MathUtils.lerp(groomLeg.mesh.rotation.x, -1.0, 5 * dt);
-                groomLeg.mesh.rotation.z = THREE.MathUtils.lerp(groomLeg.mesh.rotation.z, 0.3, 5 * dt);
-                groomLeg.knee.rotation.x = THREE.MathUtils.lerp(groomLeg.knee.rotation.x, 0.8, 5 * dt);
+                // Front right leg normal sitting
+                const sitPoseFront = getSitPose(legFR);
+                setLegTarget(legFR, sitPoseFront);
+                updateLegPose(legFR, dt, 5);
+
+                // Front left leg lifted to face for grooming
+                setLegTarget(legFL, {
+                    shoulder: -0.8,
+                    elbow: 1.0,
+                    wrist: -0.5
+                });
+                legFL.shoulder.rotation.z = THREE.MathUtils.lerp(legFL.shoulder.rotation.z || 0, 0.3, 5 * dt);
+                updateLegPose(legFL, dt, 5);
 
                 // Head licking motion
                 headGroup.rotation.z = Math.sin(time * 8) * 0.1;
@@ -2154,33 +2840,59 @@
                 const progress = 1 - (stateTimer / 2);
 
                 if (progress < 0.5) {
-                    // Front stretch - extend front legs forward
+                    // Front stretch - extend front legs forward, butt up
                     const p = progress * 2;
-                    legs[0].mesh.rotation.x = -0.6 * p;
-                    legs[0].knee.rotation.x = -0.3 * p;
-                    legs[1].mesh.rotation.x = -0.6 * p;
-                    legs[1].knee.rotation.x = -0.3 * p;
-                    // Back legs stay planted, bend more
-                    legs[2].mesh.rotation.x = 0.2 * p;
-                    legs[2].knee.rotation.x = 0.4 * p;
-                    legs[3].mesh.rotation.x = 0.2 * p;
-                    legs[3].knee.rotation.x = 0.4 * p;
-                    kittenGroup.position.y = -0.2 * p;
+
+                    // Front legs extend forward
+                    const frontStretch = {
+                        shoulder: -0.5 * p,
+                        elbow: 0.2 * p,
+                        wrist: -0.15 * p
+                    };
+                    setLegTarget(legFL, frontStretch);
+                    setLegTarget(legFR, frontStretch);
+
+                    // Back legs stay planted but hips rise
+                    const backStretch = {
+                        hip: 0.2 + 0.3 * p,
+                        knee: -0.5 - 0.3 * p,
+                        hock: 0.7 + 0.2 * p,
+                        paw: -0.15
+                    };
+                    setLegTarget(legBL, backStretch);
+                    setLegTarget(legBR, backStretch);
+
+                    kittenGroup.position.y = -0.15 * p;
                     bodyGroup.scale.z = 1 + 0.15 * p;
                 } else {
-                    // Back arch - pull front legs in
+                    // Back arch - pull front legs in, return to standing
                     const p = (progress - 0.5) * 2;
-                    legs[0].mesh.rotation.x = -0.6 + 0.6 * p;
-                    legs[0].knee.rotation.x = -0.3 + 0.3 * p;
-                    legs[1].mesh.rotation.x = -0.6 + 0.6 * p;
-                    legs[1].knee.rotation.x = -0.3 + 0.3 * p;
-                    legs[2].mesh.rotation.x = 0.2 - 0.2 * p;
-                    legs[2].knee.rotation.x = 0.4 - 0.4 * p;
-                    legs[3].mesh.rotation.x = 0.2 - 0.2 * p;
-                    legs[3].knee.rotation.x = 0.4 - 0.4 * p;
-                    kittenGroup.position.y = -0.2 + 0.2 * p;
+
+                    // Front legs return to rest
+                    const frontReturn = {
+                        shoulder: -0.5 + 0.6 * p,
+                        elbow: 0.2 - 0.35 * p,
+                        wrist: -0.15 + 0.2 * p
+                    };
+                    setLegTarget(legFL, frontReturn);
+                    setLegTarget(legFR, frontReturn);
+
+                    // Back legs return to rest
+                    const backReturn = {
+                        hip: 0.5 - 0.15 * p,
+                        knee: -0.8 + 0.1 * p,
+                        hock: 0.9,
+                        paw: -0.2
+                    };
+                    setLegTarget(legBL, backReturn);
+                    setLegTarget(legBR, backReturn);
+
+                    kittenGroup.position.y = -0.15 + 0.15 * p;
                     bodyGroup.scale.z = 1.15 - 0.15 * p;
                 }
+
+                // Update all leg poses smoothly
+                legs.forEach(leg => updateLegPose(leg, dt, 8));
 
                 // Yawn
                 if (progress > 0.3 && progress < 0.7) {
@@ -2256,11 +2968,13 @@
                         kittenGroup.position.add(direction.multiplyScalar(huntSpeed * dt));
                         kittenGroup.position.y = Math.abs(Math.sin(time * 12) * 0.08);
 
-                        // Running leg animation with articulated joints
-                        legs.forEach((leg, i) => {
-                            const phase = Math.sin(time * 15 + i * Math.PI/2);
-                            leg.mesh.rotation.x = phase * 0.5;
-                            leg.knee.rotation.x = Math.max(0, -phase) * 0.7;
+                        // Running gait animation
+                        legAnimSpeed = 6;
+                        walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                        legs.forEach(leg => {
+                            const pose = getRunPose(leg, walkCycle, 1.2);
+                            setLegTarget(leg, pose);
+                            updateLegPose(leg, dt, 15);
                         });
 
                         // Excited tail
@@ -2268,11 +2982,35 @@
                             seg.rotation.z = Math.sin(time * 10 + i) * 0.35;
                         });
                     } else {
-                        // Stalk mode - slow creep
+                        // Stalk mode - slow creep with crouched legs
                         direction.normalize();
 
-                        // Crouch and stalk
-                        kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
+                        // Crouch body
+                        kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.15, 3 * dt);
+
+                        // Crouched leg pose - slow creep animation
+                        legAnimSpeed = 1.5;
+                        walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                        legs.forEach(leg => {
+                            const basePose = getCrouchPose(leg);
+                            // Add subtle creep motion
+                            const creepOffset = Math.sin(walkCycle * Math.PI * 2 + (leg.name === 'FR' || leg.name === 'BL' ? Math.PI : 0)) * 0.1;
+                            if (leg.isFront) {
+                                setLegTarget(leg, {
+                                    shoulder: basePose.shoulder + creepOffset,
+                                    elbow: basePose.elbow,
+                                    wrist: basePose.wrist
+                                });
+                            } else {
+                                setLegTarget(leg, {
+                                    hip: basePose.hip + creepOffset,
+                                    knee: basePose.knee,
+                                    hock: basePose.hock,
+                                    paw: basePose.paw
+                                });
+                            }
+                            updateLegPose(leg, dt, 8);
+                        });
 
                         // Rotate towards prey
                         const targetRotation = Math.atan2(direction.x, direction.z);
@@ -2293,9 +3031,9 @@
                         leftEar.rotation.z = -0.1;
                         rightEar.rotation.z = 0.1;
 
-                        // Tail low and twitching
+                        // Tail low and twitching - keep straight back, not curving inward
                         tailSegments.forEach((seg, i) => {
-                            seg.rotation.x = 0.3;
+                            seg.rotation.x = -0.05;
                             seg.rotation.z = Math.sin(time * 20 + i) * 0.15;
                         });
                     }
@@ -2335,11 +3073,13 @@
                     kittenGroup.rotation.y = THREE.MathUtils.lerp(kittenGroup.rotation.y, targetRotation, 8 * dt);
                 }
 
-                // Fast leg movement with knee articulation
-                legs.forEach((leg, i) => {
-                    const phase = Math.sin(time * 18 + i * Math.PI / 2);
-                    leg.mesh.rotation.x = phase * 0.6;
-                    leg.knee.rotation.x = Math.max(0, -phase) * 0.8;
+                // Fast playful running animation
+                legAnimSpeed = 5;
+                walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                legs.forEach(leg => {
+                    const pose = getRunPose(leg, walkCycle, 1.1);
+                    setLegTarget(leg, pose);
+                    updateLegPose(leg, dt, 12);
                 });
 
                 // Excited tail
@@ -2421,20 +3161,40 @@
             else if (state === 'SCRATCH') {
                 stateTimer -= dt;
 
-                // Stand up against post
-                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0.2, 5 * dt);
+                // Stand up against post - raised position
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0.15, 5 * dt);
 
-                // Alternate front paws scratching with articulation
+                // Alternate front paws scratching
                 const scratch1 = Math.sin(time * 10);
                 const scratch2 = Math.cos(time * 10);
 
-                legs[0].mesh.rotation.x = -0.7 + scratch1 * 0.35;
-                legs[0].mesh.rotation.z = 0.2;
-                legs[0].knee.rotation.x = 0.3 + Math.abs(scratch1) * 0.2;
+                // Left front paw scratching
+                setLegTarget(legFL, {
+                    shoulder: -0.6 + scratch1 * 0.3,
+                    elbow: 0.4 + Math.abs(scratch1) * 0.25,
+                    wrist: -0.3 + scratch1 * 0.15
+                });
+                legFL.shoulder.rotation.z = 0.2;
 
-                legs[1].mesh.rotation.x = -0.7 + scratch2 * 0.35;
-                legs[1].mesh.rotation.z = -0.2;
-                legs[1].knee.rotation.x = 0.3 + Math.abs(scratch2) * 0.2;
+                // Right front paw scratching
+                setLegTarget(legFR, {
+                    shoulder: -0.6 + scratch2 * 0.3,
+                    elbow: 0.4 + Math.abs(scratch2) * 0.25,
+                    wrist: -0.3 + scratch2 * 0.15
+                });
+                legFR.shoulder.rotation.z = -0.2;
+
+                // Back legs planted, slightly crouched
+                const backScratchPose = {
+                    hip: 0.4,
+                    knee: -0.8,
+                    hock: 1.0,
+                    paw: -0.2
+                };
+                setLegTarget(legBL, backScratchPose);
+                setLegTarget(legBR, backScratchPose);
+
+                legs.forEach(leg => updateLegPose(leg, dt, 12));
 
                 // Happy tail
                 tailSegments.forEach((seg, i) => {
@@ -2446,7 +3206,232 @@
                 if (stateTimer <= 0) {
                     setState('IDLE');
                     stateTimer = 2;
+                    // Reset shoulder z rotation
+                    legFL.shoulder.rotation.z = 0;
+                    legFR.shoulder.rotation.z = 0;
                     updateStatsUI();
+                }
+            }
+            else if (state === 'WINDOW_WATCH') {
+                // Watching birds out the window
+                stateTimer -= dt;
+
+                // Face the window (west wall)
+                const targetRotation = -Math.PI / 2;
+                let rotDiff = targetRotation - kittenGroup.rotation.y;
+                while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                kittenGroup.rotation.y += rotDiff * 3 * dt;
+
+                // Sitting pose, looking up at birds
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.2, 3 * dt);
+
+                // Head follows birds (if any exist)
+                if (birds.length > 0) {
+                    const birdToWatch = birds[Math.floor(time) % birds.length];
+                    if (birdToWatch && birdToWatch.mesh) {
+                        const birdPos = birdToWatch.mesh.position.clone();
+                        const headPos = kittenGroup.position.clone();
+                        headPos.y += 1.5;
+                        const toBird = birdPos.sub(headPos).normalize();
+
+                        // Head tilts to follow bird
+                        headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, toBird.x * 0.5, 2 * dt);
+                        headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, -toBird.y * 0.3, 2 * dt);
+                    }
+                } else {
+                    // Just look up at the window
+                    headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, -0.2, 2 * dt);
+                }
+
+                // Sit pose for legs
+                const sitPose = getSitPose();
+                legs.forEach(leg => {
+                    if (leg.isFront) {
+                        setLegTarget(leg, sitPose.front);
+                    } else {
+                        setLegTarget(leg, sitPose.back);
+                    }
+                    updateLegPose(leg, dt, 4);
+                });
+
+                // Tail twitches with excitement
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 4 + i * 0.5) * (0.1 + i * 0.05);
+                    seg.rotation.x = -0.05;
+                });
+
+                // Occasionally chirp at birds
+                if (Math.random() < 0.01) {
+                    // Mouth opens for chirp
+                    mouthGroup.scale.y = 1.3;
+                }
+                mouthGroup.scale.y = THREE.MathUtils.lerp(mouthGroup.scale.y, 1, 5 * dt);
+
+                // Slight happiness from enrichment
+                stats.happiness = Math.min(100, stats.happiness + dt * 0.5);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    headGroup.rotation.y = 0;
+                    headGroup.rotation.x = 0;
+                }
+            }
+            else if (state === 'JUMP_BAT') {
+                // Jumping up to bat at the dangling toy on scratching post
+                stateTimer -= dt;
+
+                // Scratching post is at (6, 0.15, -4), dangling toy at offset (0.6, 3.5, 0)
+                const toyWorldPos = new THREE.Vector3(6.6, 3.65, -4);
+                const toToy = toyWorldPos.clone().sub(kittenGroup.position);
+                toToy.y = 0;
+
+                // Face the toy
+                const targetRotation = Math.atan2(toToy.x, toToy.z);
+                let rotDiff = targetRotation - kittenGroup.rotation.y;
+                while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                kittenGroup.rotation.y += rotDiff * 5 * dt;
+
+                // Jump cycle - crouch, jump, land
+                const jumpPhase = (3 - stateTimer) / 3; // 0 to 1 over 3 seconds
+
+                if (jumpPhase < 0.3) {
+                    // Crouch phase - compress down
+                    const crouchAmount = jumpPhase / 0.3;
+                    kittenGroup.position.y = -0.2 * crouchAmount;
+                    legs.forEach(leg => {
+                        const pose = getCrouchPose(leg);
+                        setLegTarget(leg, pose);
+                        updateLegPose(leg, dt, 8);
+                    });
+                } else if (jumpPhase < 0.6) {
+                    // Jump phase - spring up!
+                    const jumpProgress = (jumpPhase - 0.3) / 0.3;
+                    const jumpHeight = Math.sin(jumpProgress * Math.PI) * 2.5;
+                    kittenGroup.position.y = jumpHeight;
+
+                    // Extend front legs to bat
+                    setLegTarget(legFL, { shoulder: -0.8, elbow: 0.3, wrist: -0.2 });
+                    setLegTarget(legFR, { shoulder: -0.7, elbow: 0.4, wrist: -0.1 });
+                    // Back legs extended
+                    setLegTarget(legBL, { hip: 0.8, knee: -0.4, hock: 0.5, paw: -0.1 });
+                    setLegTarget(legBR, { hip: 0.8, knee: -0.4, hock: 0.5, paw: -0.1 });
+                    legs.forEach(leg => updateLegPose(leg, dt, 15));
+
+                    // Head looks up at toy
+                    headGroup.rotation.x = -0.4;
+
+                    // Bat at toy when near peak
+                    if (jumpProgress > 0.4 && jumpProgress < 0.6) {
+                        // Swing paws
+                        const batSwing = Math.sin((jumpProgress - 0.4) * Math.PI * 5);
+                        legFL.shoulder.rotation.z = batSwing * 0.4;
+                        legFR.shoulder.rotation.z = -batSwing * 0.4;
+                        // Make dangling toy swing
+                        danglingToy.position.x = 0.6 + batSwing * 0.4;
+                        danglingToy.position.z = batSwing * 0.3;
+                    }
+                } else {
+                    // Landing phase
+                    const landProgress = (jumpPhase - 0.6) / 0.4;
+                    kittenGroup.position.y = Math.max(0, 2.5 * (1 - landProgress) * (1 - landProgress));
+
+                    // Absorb landing with legs
+                    const landCrouch = Math.sin(landProgress * Math.PI * 0.5) * 0.3;
+                    legs.forEach(leg => {
+                        if (leg.isFront) {
+                            setLegTarget(leg, { shoulder: 0.2 + landCrouch, elbow: -0.5 - landCrouch, wrist: 0.3 });
+                        } else {
+                            setLegTarget(leg, { hip: 0.5 + landCrouch, knee: -1.0 - landCrouch * 0.5, hock: 1.2, paw: -0.3 });
+                        }
+                        updateLegPose(leg, dt, 10);
+                    });
+
+                    headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, 0, 3 * dt);
+                    legFL.shoulder.rotation.z = THREE.MathUtils.lerp(legFL.shoulder.rotation.z, 0, 5 * dt);
+                    legFR.shoulder.rotation.z = THREE.MathUtils.lerp(legFR.shoulder.rotation.z, 0, 5 * dt);
+                }
+
+                // Excited tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 8 + i * 0.5) * 0.4;
+                    seg.rotation.x = -0.1;
+                });
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 2);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    kittenGroup.position.y = 0;
+                    headGroup.rotation.x = 0;
+                }
+            }
+            else if (state === 'RUB') {
+                // Rubbing against the scratching post
+                stateTimer -= dt;
+
+                // Walk in a figure-8 pattern around the post base
+                const rubPhase = (4 - stateTimer) / 4;
+                const angle = rubPhase * Math.PI * 2;
+                const postPos = new THREE.Vector3(6, 0, -4);
+                const rubRadius = 1.5;
+
+                // Figure-8 path
+                const targetX = postPos.x + Math.sin(angle) * rubRadius;
+                const targetZ = postPos.z + Math.sin(angle * 2) * rubRadius * 0.5;
+
+                const moveDir = new THREE.Vector3(targetX, 0, targetZ).sub(kittenGroup.position);
+                if (moveDir.length() > 0.1) {
+                    moveDir.normalize();
+                    kittenGroup.position.add(moveDir.multiplyScalar(1.5 * dt));
+
+                    // Face movement direction but lean towards post
+                    const targetRotation = Math.atan2(moveDir.x, moveDir.z);
+                    let rotDiff = targetRotation - kittenGroup.rotation.y;
+                    while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                    while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                    kittenGroup.rotation.y += rotDiff * 4 * dt;
+                }
+
+                // Lean body towards post (rubbing side)
+                const toPost = postPos.clone().sub(kittenGroup.position);
+                toPost.y = 0;
+                const leanAngle = Math.atan2(toPost.x, toPost.z) - kittenGroup.rotation.y;
+                kittenGroup.rotation.z = Math.sin(leanAngle) * 0.25;
+
+                // Head rubs - turn head to rub cheek on post
+                headGroup.rotation.y = Math.sin(time * 3) * 0.3;
+                headGroup.rotation.z = Math.sin(time * 2) * 0.15;
+
+                // Slow walking animation
+                walkCycle = (walkCycle + dt * 2) % 1.0;
+                legs.forEach(leg => {
+                    const pose = getWalkPose(leg, walkCycle, 0.6);
+                    setLegTarget(leg, pose);
+                    updateLegPose(leg, dt, 6);
+                });
+
+                // Tail up and happy, slight curve
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.x = -0.15 - i * 0.05;
+                    seg.rotation.z = Math.sin(time * 2 + i * 0.3) * 0.15;
+                });
+
+                // Happy squinty eyes
+                setExpression('happy', 0.7);
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 1.5);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    kittenGroup.rotation.z = 0;
+                    headGroup.rotation.y = 0;
+                    headGroup.rotation.z = 0;
+                    setExpression('neutral');
                 }
             }
             else if (state === 'ZOOMIES') {
@@ -2478,17 +3463,19 @@
                 // Bouncy running
                 kittenGroup.position.y = Math.abs(Math.sin(time * 20) * 0.15);
 
-                // Crazy fast leg movement
-                legs.forEach((leg, i) => {
-                    const phase = Math.sin(time * 25 + i * Math.PI / 2);
-                    leg.mesh.rotation.x = phase * 0.7;
-                    leg.knee.rotation.x = Math.max(0, -phase) * 0.9;
+                // ZOOMIES - super fast running animation!
+                legAnimSpeed = 8;
+                walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                legs.forEach(leg => {
+                    const pose = getRunPose(leg, walkCycle, 1.4);
+                    setLegTarget(leg, pose);
+                    updateLegPose(leg, dt, 20);
                 });
 
-                // Wild tail
+                // Wild tail - keep pointing outward even during crazy movement
                 tailSegments.forEach((seg, i) => {
                     seg.rotation.z = Math.sin(time * 15 + i) * 0.6;
-                    seg.rotation.x = -0.2 + Math.cos(time * 12 + i) * 0.3;
+                    seg.rotation.x = -0.35 + Math.cos(time * 12 + i) * 0.15;
                 });
 
                 // Wide eyes during zoomies
@@ -2525,10 +3512,24 @@
                 } else if (progress < 0.7) {
                     // Wiggle on back
                     kittenGroup.rotation.z = Math.PI * 0.9 + Math.sin(time * 8) * 0.15;
-                    // Paws in air wiggling
+                    // Paws in air wiggling - cute belly-up pose
                     legs.forEach((leg, i) => {
-                        leg.mesh.rotation.x = -0.5 + Math.sin(time * 6 + i) * 0.3;
-                        leg.knee.rotation.x = 0.5 + Math.sin(time * 8 + i) * 0.2;
+                        const wiggle = Math.sin(time * 6 + i * 0.7) * 0.25;
+                        if (leg.isFront) {
+                            setLegTarget(leg, {
+                                shoulder: -0.4 + wiggle,
+                                elbow: 0.6 + Math.sin(time * 8 + i) * 0.2,
+                                wrist: -0.3 + Math.sin(time * 7 + i) * 0.15
+                            });
+                        } else {
+                            setLegTarget(leg, {
+                                hip: -0.3 + wiggle,
+                                knee: 0.5 + Math.sin(time * 7 + i) * 0.2,
+                                hock: -0.4 + Math.sin(time * 9 + i) * 0.15,
+                                paw: 0.2
+                            });
+                        }
+                        updateLegPose(leg, dt, 10);
                     });
                     // Happy squinty eyes
                     leftPupil.scale.y = 0.4;
