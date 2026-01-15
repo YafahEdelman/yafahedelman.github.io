@@ -920,80 +920,383 @@
 
         headGroup.add(mPatternGroup);
 
-        // === LEGS - Chubbier and cuter ===
+        // === LEGS - Realistic cat anatomy ===
+        // Cats have digitigrade legs (walk on toes)
+        // Front legs: shoulder -> elbow -> wrist -> paw
+        // Back legs: hip -> knee(stifle) -> hock -> metatarsus -> paw
         const legs = [];
-        const upperLegGeo = new THREE.CapsuleGeometry(0.1, 0.3, 8, 12);
-        const lowerLegGeo = new THREE.CapsuleGeometry(0.09, 0.28, 8, 12);
-        const pawGeo = new THREE.SphereGeometry(0.13, 16, 16);
-        const pawPadGeo = new THREE.SphereGeometry(0.045, 8, 8);
-        const toeGeo = new THREE.SphereGeometry(0.025, 6, 6);
 
-        function createLeg(x, z, name) {
+        // Geometry for different leg segments
+        const frontUpperGeo = new THREE.CapsuleGeometry(0.09, 0.25, 8, 12);  // Upper arm
+        const frontLowerGeo = new THREE.CapsuleGeometry(0.075, 0.28, 8, 12); // Forearm
+        const frontPawGeo = new THREE.SphereGeometry(0.11, 16, 16);
+
+        const backThighGeo = new THREE.CapsuleGeometry(0.12, 0.28, 8, 12);   // Thigh - muscular
+        const backShinGeo = new THREE.CapsuleGeometry(0.08, 0.25, 8, 12);    // Lower leg
+        const backMetaGeo = new THREE.CapsuleGeometry(0.055, 0.18, 6, 8);    // Metatarsus (long foot bone)
+        const backPawGeo = new THREE.SphereGeometry(0.10, 16, 16);
+
+        const pawPadGeo = new THREE.SphereGeometry(0.04, 8, 8);
+        const toeGeo = new THREE.SphereGeometry(0.022, 6, 6);
+
+        // Create front leg with proper cat anatomy
+        function createFrontLeg(x, z, name) {
+            // Shoulder joint - attaches to body
+            const shoulderJoint = new THREE.Group();
+            shoulderJoint.position.set(x, 0.9, z);
+
+            // Upper arm (humerus) - short, angled back slightly
+            const upperArm = new THREE.Mesh(frontUpperGeo, materialFur);
+            upperArm.position.y = -0.15;
+            upperArm.castShadow = true;
+            shoulderJoint.add(upperArm);
+
+            // Elbow joint - bends backward
+            const elbowJoint = new THREE.Group();
+            elbowJoint.position.y = -0.32;
+            shoulderJoint.add(elbowJoint);
+
+            // Forearm (radius/ulna) - longer, goes down
+            const forearm = new THREE.Mesh(frontLowerGeo, materialFur);
+            forearm.position.y = -0.16;
+            forearm.castShadow = true;
+            elbowJoint.add(forearm);
+
+            // Wrist joint (carpus)
+            const wristJoint = new THREE.Group();
+            wristJoint.position.y = -0.35;
+            elbowJoint.add(wristJoint);
+
+            // Paw
+            const paw = new THREE.Mesh(frontPawGeo, materialFur);
+            paw.scale.set(1.1, 0.45, 1.3);
+            paw.position.y = -0.02;
+            paw.castShadow = true;
+            wristJoint.add(paw);
+
+            // Paw pads
+            const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
+            mainPad.position.set(0, -0.03, 0.03);
+            mainPad.scale.set(1.6, 0.5, 1.3);
+            wristJoint.add(mainPad);
+
+            // Toe beans
+            [[-0.05, -0.03, 0.09], [-0.017, -0.03, 0.11], [0.017, -0.03, 0.11], [0.05, -0.03, 0.09]].forEach(pos => {
+                const toe = new THREE.Mesh(toeGeo, materialPawPad);
+                toe.position.set(...pos);
+                toe.scale.set(1, 0.6, 1);
+                wristJoint.add(toe);
+            });
+
+            kittenGroup.add(shoulderJoint);
+
+            return {
+                root: shoulderJoint,
+                shoulder: shoulderJoint,
+                elbow: elbowJoint,
+                wrist: wristJoint,
+                name: name,
+                isFront: true,
+                // Rest pose angles (standing naturally)
+                restPose: { shoulder: 0.1, elbow: -0.15, wrist: 0.05 },
+                // Current animation targets
+                targetPose: { shoulder: 0.1, elbow: -0.15, wrist: 0.05 },
+                currentPose: { shoulder: 0.1, elbow: -0.15, wrist: 0.05 }
+            };
+        }
+
+        // Create back leg with realistic digitigrade anatomy
+        function createBackLeg(x, z, name) {
+            // Hip joint
             const hipJoint = new THREE.Group();
-            hipJoint.position.set(x, 0.85, z);
+            hipJoint.position.set(x, 0.95, z);
 
-            // Upper leg (thigh)
-            const upperLeg = new THREE.Mesh(upperLegGeo, materialFur);
-            upperLeg.position.y = -0.18;
-            upperLeg.castShadow = true;
-            hipJoint.add(upperLeg);
+            // Thigh (femur) - angles forward, muscular
+            const thigh = new THREE.Mesh(backThighGeo, materialFur);
+            thigh.position.y = -0.18;
+            thigh.castShadow = true;
+            hipJoint.add(thigh);
 
-            // Knee joint
+            // Knee joint (stifle) - the forward-bending joint
             const kneeJoint = new THREE.Group();
             kneeJoint.position.y = -0.38;
             hipJoint.add(kneeJoint);
 
-            // Lower leg
-            const lowerLeg = new THREE.Mesh(lowerLegGeo, materialFur);
-            lowerLeg.position.y = -0.18;
-            lowerLeg.castShadow = true;
-            kneeJoint.add(lowerLeg);
+            // Lower leg (tibia) - angles backward to hock
+            const shin = new THREE.Mesh(backShinGeo, materialFur);
+            shin.position.y = -0.15;
+            shin.castShadow = true;
+            kneeJoint.add(shin);
 
-            // Ankle joint
-            const ankleJoint = new THREE.Group();
-            ankleJoint.position.y = -0.38;
-            kneeJoint.add(ankleJoint);
+            // Hock joint (tarsus) - the prominent backward-bending joint
+            // This is what makes cat back legs look distinctive
+            const hockJoint = new THREE.Group();
+            hockJoint.position.y = -0.32;
+            kneeJoint.add(hockJoint);
 
-            // Paw - rounder and cuter
-            const paw = new THREE.Mesh(pawGeo, materialFur);
-            paw.scale.set(1.2, 0.5, 1.4);
+            // Metatarsus - the long foot bone, angles forward to ground
+            const metatarsus = new THREE.Mesh(backMetaGeo, materialFur);
+            metatarsus.position.y = -0.12;
+            metatarsus.castShadow = true;
+            hockJoint.add(metatarsus);
+
+            // Ankle/paw joint
+            const pawJoint = new THREE.Group();
+            pawJoint.position.y = -0.22;
+            hockJoint.add(pawJoint);
+
+            // Paw (smaller than front)
+            const paw = new THREE.Mesh(backPawGeo, materialFur);
+            paw.scale.set(1.0, 0.4, 1.2);
+            paw.position.y = -0.01;
             paw.castShadow = true;
-            ankleJoint.add(paw);
+            pawJoint.add(paw);
 
-            // Main paw pad (big pink bean)
+            // Paw pads
             const mainPad = new THREE.Mesh(pawPadGeo, materialPawPad);
-            mainPad.position.set(0, -0.04, 0.04);
-            mainPad.scale.set(1.8, 0.5, 1.4);
-            ankleJoint.add(mainPad);
+            mainPad.position.set(0, -0.025, 0.025);
+            mainPad.scale.set(1.4, 0.5, 1.2);
+            pawJoint.add(mainPad);
 
-            // Toe beans! (4 little pink beans)
-            const toePositions = [
-                [-0.06, -0.04, 0.11],
-                [-0.02, -0.04, 0.13],
-                [0.02, -0.04, 0.13],
-                [0.06, -0.04, 0.11]
-            ];
-            toePositions.forEach(pos => {
+            // Toe beans
+            [[-0.04, -0.025, 0.07], [-0.013, -0.025, 0.085], [0.013, -0.025, 0.085], [0.04, -0.025, 0.07]].forEach(pos => {
                 const toe = new THREE.Mesh(toeGeo, materialPawPad);
                 toe.position.set(...pos);
                 toe.scale.set(1, 0.6, 1);
-                ankleJoint.add(toe);
+                pawJoint.add(toe);
             });
 
             kittenGroup.add(hipJoint);
-            legs.push({
-                mesh: hipJoint,
+
+            return {
+                root: hipJoint,
+                hip: hipJoint,
                 knee: kneeJoint,
-                ankle: ankleJoint,
-                name: name
-            });
-            return hipJoint;
+                hock: hockJoint,
+                paw: pawJoint,
+                name: name,
+                isFront: false,
+                // Rest pose - the characteristic cat back leg stance
+                // Hip forward, knee bent forward, hock bent back, creating the "Z" shape
+                restPose: { hip: 0.35, knee: -0.7, hock: 0.9, paw: -0.2 },
+                targetPose: { hip: 0.35, knee: -0.7, hock: 0.9, paw: -0.2 },
+                currentPose: { hip: 0.35, knee: -0.7, hock: 0.9, paw: -0.2 }
+            };
         }
 
-        const legFL = createLeg(0.32, 0.45, 'FL');
-        const legFR = createLeg(-0.32, 0.45, 'FR');
-        const legBL = createLeg(0.32, -0.45, 'BL');
-        const legBR = createLeg(-0.32, -0.45, 'BR');
+        // Create all four legs
+        const legFL = createFrontLeg(0.28, 0.4, 'FL');
+        const legFR = createFrontLeg(-0.28, 0.4, 'FR');
+        const legBL = createBackLeg(0.26, -0.4, 'BL');
+        const legBR = createBackLeg(-0.26, -0.4, 'BR');
+
+        legs.push(legFL, legFR, legBL, legBR);
+
+        // Apply rest pose to all legs initially
+        function applyLegPose(leg) {
+            if (leg.isFront) {
+                leg.shoulder.rotation.x = leg.currentPose.shoulder;
+                leg.elbow.rotation.x = leg.currentPose.elbow;
+                leg.wrist.rotation.x = leg.currentPose.wrist;
+            } else {
+                leg.hip.rotation.x = leg.currentPose.hip;
+                leg.knee.rotation.x = leg.currentPose.knee;
+                leg.hock.rotation.x = leg.currentPose.hock;
+                leg.paw.rotation.x = leg.currentPose.paw;
+            }
+        }
+
+        // Smoothly interpolate leg poses
+        function updateLegPose(leg, dt, speed = 8) {
+            if (leg.isFront) {
+                leg.currentPose.shoulder = THREE.MathUtils.lerp(leg.currentPose.shoulder, leg.targetPose.shoulder, speed * dt);
+                leg.currentPose.elbow = THREE.MathUtils.lerp(leg.currentPose.elbow, leg.targetPose.elbow, speed * dt);
+                leg.currentPose.wrist = THREE.MathUtils.lerp(leg.currentPose.wrist, leg.targetPose.wrist, speed * dt);
+            } else {
+                leg.currentPose.hip = THREE.MathUtils.lerp(leg.currentPose.hip, leg.targetPose.hip, speed * dt);
+                leg.currentPose.knee = THREE.MathUtils.lerp(leg.currentPose.knee, leg.targetPose.knee, speed * dt);
+                leg.currentPose.hock = THREE.MathUtils.lerp(leg.currentPose.hock, leg.targetPose.hock, speed * dt);
+                leg.currentPose.paw = THREE.MathUtils.lerp(leg.currentPose.paw, leg.targetPose.paw, speed * dt);
+            }
+            applyLegPose(leg);
+        }
+
+        // Walking gait - diagonal pairs move together
+        // phase: 0-1 represents one full stride cycle
+        function getWalkPose(leg, phase, amplitude = 1.0) {
+            // Offset phase for diagonal gait (FL+BR, FR+BL)
+            let legPhase = phase;
+            if (leg.name === 'FR' || leg.name === 'BL') {
+                legPhase = (phase + 0.5) % 1.0;
+            }
+
+            // Convert to -PI to PI for sine calculations
+            const cycleAngle = legPhase * Math.PI * 2;
+
+            // Swing phase (leg in air): 0.0-0.3
+            // Stance phase (leg on ground): 0.3-1.0
+            const swingDuration = 0.3;
+            const isSwing = legPhase < swingDuration;
+
+            if (leg.isFront) {
+                if (isSwing) {
+                    // Swing forward - lift paw, extend leg
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI); // Smooth arc up and down
+                    return {
+                        shoulder: (0.25 - swingProgress * 0.5) * amplitude,
+                        elbow: (-0.3 - lift * 0.4) * amplitude,
+                        wrist: (0.1 + lift * 0.3) * amplitude
+                    };
+                } else {
+                    // Stance - push back
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        shoulder: (-0.25 + stanceProgress * 0.5) * amplitude,
+                        elbow: -0.15 * amplitude,
+                        wrist: 0.05 * amplitude
+                    };
+                }
+            } else {
+                // Back leg - more complex motion with hock
+                if (isSwing) {
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI);
+                    return {
+                        hip: (0.5 - swingProgress * 0.4) * amplitude,
+                        knee: (-0.9 - lift * 0.3) * amplitude,
+                        hock: (1.1 + lift * 0.4) * amplitude,
+                        paw: (-0.3 - lift * 0.2) * amplitude
+                    };
+                } else {
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        hip: (0.1 + stanceProgress * 0.4) * amplitude,
+                        knee: -0.7 * amplitude,
+                        hock: 0.9 * amplitude,
+                        paw: -0.2 * amplitude
+                    };
+                }
+            }
+        }
+
+        // Running gait - faster, more extended
+        function getRunPose(leg, phase, amplitude = 1.0) {
+            let legPhase = phase;
+            if (leg.name === 'FR' || leg.name === 'BL') {
+                legPhase = (phase + 0.5) % 1.0;
+            }
+
+            const swingDuration = 0.4; // Longer swing phase when running
+            const isSwing = legPhase < swingDuration;
+
+            if (leg.isFront) {
+                if (isSwing) {
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI);
+                    return {
+                        shoulder: (0.4 - swingProgress * 0.8) * amplitude,
+                        elbow: (-0.4 - lift * 0.5) * amplitude,
+                        wrist: (0.15 + lift * 0.4) * amplitude
+                    };
+                } else {
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        shoulder: (-0.4 + stanceProgress * 0.8) * amplitude,
+                        elbow: -0.2 * amplitude,
+                        wrist: 0.05 * amplitude
+                    };
+                }
+            } else {
+                if (isSwing) {
+                    const swingProgress = legPhase / swingDuration;
+                    const lift = Math.sin(swingProgress * Math.PI);
+                    return {
+                        hip: (0.7 - swingProgress * 0.6) * amplitude,
+                        knee: (-1.1 - lift * 0.4) * amplitude,
+                        hock: (1.4 + lift * 0.5) * amplitude,
+                        paw: (-0.4 - lift * 0.3) * amplitude
+                    };
+                } else {
+                    const stanceProgress = (legPhase - swingDuration) / (1 - swingDuration);
+                    return {
+                        hip: (0.1 + stanceProgress * 0.6) * amplitude,
+                        knee: -0.8 * amplitude,
+                        hock: 1.0 * amplitude,
+                        paw: -0.2 * amplitude
+                    };
+                }
+            }
+        }
+
+        // Crouching pose for hunting/stalking
+        function getCrouchPose(leg) {
+            if (leg.isFront) {
+                return { shoulder: 0.3, elbow: -0.5, wrist: 0.2 };
+            } else {
+                return { hip: 0.6, knee: -1.0, hock: 1.3, paw: -0.3 };
+            }
+        }
+
+        // Sitting pose
+        function getSitPose(leg) {
+            if (leg.isFront) {
+                return { shoulder: 0.05, elbow: -0.1, wrist: 0.05 };
+            } else {
+                // Back legs tucked under when sitting
+                return { hip: 1.2, knee: -1.8, hock: 1.5, paw: -0.4 };
+            }
+        }
+
+        // Stretching pose
+        function getStretchPose(leg, stretchPhase) {
+            if (leg.isFront) {
+                // Front legs extend forward
+                return {
+                    shoulder: -0.3 + Math.sin(stretchPhase) * 0.2,
+                    elbow: 0.1,
+                    wrist: -0.1
+                };
+            } else {
+                // Back legs extend back
+                return {
+                    hip: -0.2 + Math.sin(stretchPhase) * 0.1,
+                    knee: -0.3,
+                    hock: 0.5,
+                    paw: -0.1
+                };
+            }
+        }
+
+        // Set target pose for a leg
+        function setLegTarget(leg, pose) {
+            if (leg.isFront) {
+                leg.targetPose.shoulder = pose.shoulder;
+                leg.targetPose.elbow = pose.elbow;
+                leg.targetPose.wrist = pose.wrist;
+            } else {
+                leg.targetPose.hip = pose.hip;
+                leg.targetPose.knee = pose.knee;
+                leg.targetPose.hock = pose.hock;
+                leg.targetPose.paw = pose.paw;
+            }
+        }
+
+        // Initialize all legs to rest pose
+        legs.forEach(leg => {
+            if (leg.isFront) {
+                leg.currentPose = { ...leg.restPose };
+                leg.targetPose = { ...leg.restPose };
+            } else {
+                leg.currentPose = { ...leg.restPose };
+                leg.targetPose = { ...leg.restPose };
+            }
+            applyLegPose(leg);
+        });
+
+        // Animation state for legs
+        let walkCycle = 0;
+        let legAnimSpeed = 3; // Cycles per second
 
         // Tail - fluffy and expressive
         const tailGroup = new THREE.Group();
@@ -1933,12 +2236,10 @@
                 leftPupil.scale.y = THREE.MathUtils.lerp(leftPupil.scale.y, 1, 5 * dt);
                 rightPupil.scale.y = THREE.MathUtils.lerp(rightPupil.scale.y, 1, 5 * dt);
 
-                // Reset legs to standing pose
+                // Reset legs to standing pose with natural cat stance
                 legs.forEach(leg => {
-                    leg.mesh.rotation.x = THREE.MathUtils.lerp(leg.mesh.rotation.x, 0, 5 * dt);
-                    leg.mesh.rotation.z = THREE.MathUtils.lerp(leg.mesh.rotation.z, 0, 5 * dt);
-                    leg.knee.rotation.x = THREE.MathUtils.lerp(leg.knee.rotation.x, 0, 5 * dt);
-                    leg.ankle.rotation.x = THREE.MathUtils.lerp(leg.ankle.rotation.x, 0, 5 * dt);
+                    setLegTarget(leg, leg.restPose);
+                    updateLegPose(leg, dt, 5);
                 });
 
                 // Look at interesting things
@@ -2038,26 +2339,24 @@
                     const speed = state === 'LASER' ? runSpeed : currentSpeed;
                     kittenGroup.position.add(direction.multiplyScalar(speed * dt));
 
-                    // Walk animation with articulated legs
-                    const legAmp = state === 'LASER' ? 0.5 : 0.35;
-                    const kneeAmp = state === 'LASER' ? 0.6 : 0.4;
-                    const legFreq = state === 'LASER' ? 15 : 10;
+                    // Realistic walk/run animation with proper gait
+                    const isRunning = state === 'LASER' || speed > walkSpeed * 1.5;
+                    legAnimSpeed = isRunning ? 5 : 3;
+                    walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
 
-                    // Front left, back right swing together
-                    const phase1 = Math.sin(time * legFreq);
-                    const phase2 = Math.cos(time * legFreq);
+                    // Apply proper gait animation to each leg
+                    legs.forEach(leg => {
+                        const pose = isRunning ? getRunPose(leg, walkCycle) : getWalkPose(leg, walkCycle);
+                        setLegTarget(leg, pose);
+                        updateLegPose(leg, dt, 12);
+                    });
 
-                    legs[0].mesh.rotation.x = phase1 * legAmp;
-                    legs[0].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
-                    legs[1].mesh.rotation.x = phase2 * legAmp;
-                    legs[1].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
-                    legs[2].mesh.rotation.x = phase2 * legAmp;
-                    legs[2].knee.rotation.x = Math.max(0, -phase2) * kneeAmp;
-                    legs[3].mesh.rotation.x = phase1 * legAmp;
-                    legs[3].knee.rotation.x = Math.max(0, -phase1) * kneeAmp;
+                    // Natural head bob synced with gait
+                    const bobPhase = Math.sin(walkCycle * Math.PI * 4);
+                    headGroup.position.y = 1.9 + bobPhase * (isRunning ? 0.06 : 0.03);
 
-                    // Head bob
-                    headGroup.position.y = 1.9 + Math.sin(time * legFreq * 2) * 0.04;
+                    // Subtle body sway
+                    bodyGroup.rotation.z = Math.sin(walkCycle * Math.PI * 2) * 0.02;
 
                     // Tail animation
                     tailSegments.forEach((seg, i) => {
@@ -2120,20 +2419,29 @@
             else if (state === 'GROOM') {
                 stateTimer -= dt;
 
-                // Sit pose
-                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
+                // Sit pose - lower body
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.2, 3 * dt);
 
-                // Bend back legs for sitting
-                legs[2].mesh.rotation.x = THREE.MathUtils.lerp(legs[2].mesh.rotation.x, -0.8, 3 * dt);
-                legs[2].knee.rotation.x = THREE.MathUtils.lerp(legs[2].knee.rotation.x, 1.2, 3 * dt);
-                legs[3].mesh.rotation.x = THREE.MathUtils.lerp(legs[3].mesh.rotation.x, -0.8, 3 * dt);
-                legs[3].knee.rotation.x = THREE.MathUtils.lerp(legs[3].knee.rotation.x, 1.2, 3 * dt);
+                // Back legs in sitting pose (tucked under)
+                const sitPoseBack = getSitPose(legBL);
+                setLegTarget(legBL, sitPoseBack);
+                setLegTarget(legBR, sitPoseBack);
+                updateLegPose(legBL, dt, 5);
+                updateLegPose(legBR, dt, 5);
 
-                // Lift front paw to face with bending
-                const groomLeg = legs[0];
-                groomLeg.mesh.rotation.x = THREE.MathUtils.lerp(groomLeg.mesh.rotation.x, -1.0, 5 * dt);
-                groomLeg.mesh.rotation.z = THREE.MathUtils.lerp(groomLeg.mesh.rotation.z, 0.3, 5 * dt);
-                groomLeg.knee.rotation.x = THREE.MathUtils.lerp(groomLeg.knee.rotation.x, 0.8, 5 * dt);
+                // Front right leg normal sitting
+                const sitPoseFront = getSitPose(legFR);
+                setLegTarget(legFR, sitPoseFront);
+                updateLegPose(legFR, dt, 5);
+
+                // Front left leg lifted to face for grooming
+                setLegTarget(legFL, {
+                    shoulder: -0.8,
+                    elbow: 1.0,
+                    wrist: -0.5
+                });
+                legFL.shoulder.rotation.z = THREE.MathUtils.lerp(legFL.shoulder.rotation.z || 0, 0.3, 5 * dt);
+                updateLegPose(legFL, dt, 5);
 
                 // Head licking motion
                 headGroup.rotation.z = Math.sin(time * 8) * 0.1;
@@ -2154,33 +2462,59 @@
                 const progress = 1 - (stateTimer / 2);
 
                 if (progress < 0.5) {
-                    // Front stretch - extend front legs forward
+                    // Front stretch - extend front legs forward, butt up
                     const p = progress * 2;
-                    legs[0].mesh.rotation.x = -0.6 * p;
-                    legs[0].knee.rotation.x = -0.3 * p;
-                    legs[1].mesh.rotation.x = -0.6 * p;
-                    legs[1].knee.rotation.x = -0.3 * p;
-                    // Back legs stay planted, bend more
-                    legs[2].mesh.rotation.x = 0.2 * p;
-                    legs[2].knee.rotation.x = 0.4 * p;
-                    legs[3].mesh.rotation.x = 0.2 * p;
-                    legs[3].knee.rotation.x = 0.4 * p;
-                    kittenGroup.position.y = -0.2 * p;
+
+                    // Front legs extend forward
+                    const frontStretch = {
+                        shoulder: -0.5 * p,
+                        elbow: 0.2 * p,
+                        wrist: -0.15 * p
+                    };
+                    setLegTarget(legFL, frontStretch);
+                    setLegTarget(legFR, frontStretch);
+
+                    // Back legs stay planted but hips rise
+                    const backStretch = {
+                        hip: 0.2 + 0.3 * p,
+                        knee: -0.5 - 0.3 * p,
+                        hock: 0.7 + 0.2 * p,
+                        paw: -0.15
+                    };
+                    setLegTarget(legBL, backStretch);
+                    setLegTarget(legBR, backStretch);
+
+                    kittenGroup.position.y = -0.15 * p;
                     bodyGroup.scale.z = 1 + 0.15 * p;
                 } else {
-                    // Back arch - pull front legs in
+                    // Back arch - pull front legs in, return to standing
                     const p = (progress - 0.5) * 2;
-                    legs[0].mesh.rotation.x = -0.6 + 0.6 * p;
-                    legs[0].knee.rotation.x = -0.3 + 0.3 * p;
-                    legs[1].mesh.rotation.x = -0.6 + 0.6 * p;
-                    legs[1].knee.rotation.x = -0.3 + 0.3 * p;
-                    legs[2].mesh.rotation.x = 0.2 - 0.2 * p;
-                    legs[2].knee.rotation.x = 0.4 - 0.4 * p;
-                    legs[3].mesh.rotation.x = 0.2 - 0.2 * p;
-                    legs[3].knee.rotation.x = 0.4 - 0.4 * p;
-                    kittenGroup.position.y = -0.2 + 0.2 * p;
+
+                    // Front legs return to rest
+                    const frontReturn = {
+                        shoulder: -0.5 + 0.6 * p,
+                        elbow: 0.2 - 0.35 * p,
+                        wrist: -0.15 + 0.2 * p
+                    };
+                    setLegTarget(legFL, frontReturn);
+                    setLegTarget(legFR, frontReturn);
+
+                    // Back legs return to rest
+                    const backReturn = {
+                        hip: 0.5 - 0.15 * p,
+                        knee: -0.8 + 0.1 * p,
+                        hock: 0.9,
+                        paw: -0.2
+                    };
+                    setLegTarget(legBL, backReturn);
+                    setLegTarget(legBR, backReturn);
+
+                    kittenGroup.position.y = -0.15 + 0.15 * p;
                     bodyGroup.scale.z = 1.15 - 0.15 * p;
                 }
+
+                // Update all leg poses smoothly
+                legs.forEach(leg => updateLegPose(leg, dt, 8));
 
                 // Yawn
                 if (progress > 0.3 && progress < 0.7) {
@@ -2256,11 +2590,13 @@
                         kittenGroup.position.add(direction.multiplyScalar(huntSpeed * dt));
                         kittenGroup.position.y = Math.abs(Math.sin(time * 12) * 0.08);
 
-                        // Running leg animation with articulated joints
-                        legs.forEach((leg, i) => {
-                            const phase = Math.sin(time * 15 + i * Math.PI/2);
-                            leg.mesh.rotation.x = phase * 0.5;
-                            leg.knee.rotation.x = Math.max(0, -phase) * 0.7;
+                        // Running gait animation
+                        legAnimSpeed = 6;
+                        walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                        legs.forEach(leg => {
+                            const pose = getRunPose(leg, walkCycle, 1.2);
+                            setLegTarget(leg, pose);
+                            updateLegPose(leg, dt, 15);
                         });
 
                         // Excited tail
@@ -2268,11 +2604,35 @@
                             seg.rotation.z = Math.sin(time * 10 + i) * 0.35;
                         });
                     } else {
-                        // Stalk mode - slow creep
+                        // Stalk mode - slow creep with crouched legs
                         direction.normalize();
 
-                        // Crouch and stalk
-                        kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.3, 3 * dt);
+                        // Crouch body
+                        kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.15, 3 * dt);
+
+                        // Crouched leg pose - slow creep animation
+                        legAnimSpeed = 1.5;
+                        walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                        legs.forEach(leg => {
+                            const basePose = getCrouchPose(leg);
+                            // Add subtle creep motion
+                            const creepOffset = Math.sin(walkCycle * Math.PI * 2 + (leg.name === 'FR' || leg.name === 'BL' ? Math.PI : 0)) * 0.1;
+                            if (leg.isFront) {
+                                setLegTarget(leg, {
+                                    shoulder: basePose.shoulder + creepOffset,
+                                    elbow: basePose.elbow,
+                                    wrist: basePose.wrist
+                                });
+                            } else {
+                                setLegTarget(leg, {
+                                    hip: basePose.hip + creepOffset,
+                                    knee: basePose.knee,
+                                    hock: basePose.hock,
+                                    paw: basePose.paw
+                                });
+                            }
+                            updateLegPose(leg, dt, 8);
+                        });
 
                         // Rotate towards prey
                         const targetRotation = Math.atan2(direction.x, direction.z);
@@ -2335,11 +2695,13 @@
                     kittenGroup.rotation.y = THREE.MathUtils.lerp(kittenGroup.rotation.y, targetRotation, 8 * dt);
                 }
 
-                // Fast leg movement with knee articulation
-                legs.forEach((leg, i) => {
-                    const phase = Math.sin(time * 18 + i * Math.PI / 2);
-                    leg.mesh.rotation.x = phase * 0.6;
-                    leg.knee.rotation.x = Math.max(0, -phase) * 0.8;
+                // Fast playful running animation
+                legAnimSpeed = 5;
+                walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                legs.forEach(leg => {
+                    const pose = getRunPose(leg, walkCycle, 1.1);
+                    setLegTarget(leg, pose);
+                    updateLegPose(leg, dt, 12);
                 });
 
                 // Excited tail
@@ -2421,20 +2783,40 @@
             else if (state === 'SCRATCH') {
                 stateTimer -= dt;
 
-                // Stand up against post
-                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0.2, 5 * dt);
+                // Stand up against post - raised position
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, 0.15, 5 * dt);
 
-                // Alternate front paws scratching with articulation
+                // Alternate front paws scratching
                 const scratch1 = Math.sin(time * 10);
                 const scratch2 = Math.cos(time * 10);
 
-                legs[0].mesh.rotation.x = -0.7 + scratch1 * 0.35;
-                legs[0].mesh.rotation.z = 0.2;
-                legs[0].knee.rotation.x = 0.3 + Math.abs(scratch1) * 0.2;
+                // Left front paw scratching
+                setLegTarget(legFL, {
+                    shoulder: -0.6 + scratch1 * 0.3,
+                    elbow: 0.4 + Math.abs(scratch1) * 0.25,
+                    wrist: -0.3 + scratch1 * 0.15
+                });
+                legFL.shoulder.rotation.z = 0.2;
 
-                legs[1].mesh.rotation.x = -0.7 + scratch2 * 0.35;
-                legs[1].mesh.rotation.z = -0.2;
-                legs[1].knee.rotation.x = 0.3 + Math.abs(scratch2) * 0.2;
+                // Right front paw scratching
+                setLegTarget(legFR, {
+                    shoulder: -0.6 + scratch2 * 0.3,
+                    elbow: 0.4 + Math.abs(scratch2) * 0.25,
+                    wrist: -0.3 + scratch2 * 0.15
+                });
+                legFR.shoulder.rotation.z = -0.2;
+
+                // Back legs planted, slightly crouched
+                const backScratchPose = {
+                    hip: 0.4,
+                    knee: -0.8,
+                    hock: 1.0,
+                    paw: -0.2
+                };
+                setLegTarget(legBL, backScratchPose);
+                setLegTarget(legBR, backScratchPose);
+
+                legs.forEach(leg => updateLegPose(leg, dt, 12));
 
                 // Happy tail
                 tailSegments.forEach((seg, i) => {
@@ -2446,6 +2828,9 @@
                 if (stateTimer <= 0) {
                     setState('IDLE');
                     stateTimer = 2;
+                    // Reset shoulder z rotation
+                    legFL.shoulder.rotation.z = 0;
+                    legFR.shoulder.rotation.z = 0;
                     updateStatsUI();
                 }
             }
@@ -2478,11 +2863,13 @@
                 // Bouncy running
                 kittenGroup.position.y = Math.abs(Math.sin(time * 20) * 0.15);
 
-                // Crazy fast leg movement
-                legs.forEach((leg, i) => {
-                    const phase = Math.sin(time * 25 + i * Math.PI / 2);
-                    leg.mesh.rotation.x = phase * 0.7;
-                    leg.knee.rotation.x = Math.max(0, -phase) * 0.9;
+                // ZOOMIES - super fast running animation!
+                legAnimSpeed = 8;
+                walkCycle = (walkCycle + dt * legAnimSpeed) % 1.0;
+                legs.forEach(leg => {
+                    const pose = getRunPose(leg, walkCycle, 1.4);
+                    setLegTarget(leg, pose);
+                    updateLegPose(leg, dt, 20);
                 });
 
                 // Wild tail
@@ -2525,10 +2912,24 @@
                 } else if (progress < 0.7) {
                     // Wiggle on back
                     kittenGroup.rotation.z = Math.PI * 0.9 + Math.sin(time * 8) * 0.15;
-                    // Paws in air wiggling
+                    // Paws in air wiggling - cute belly-up pose
                     legs.forEach((leg, i) => {
-                        leg.mesh.rotation.x = -0.5 + Math.sin(time * 6 + i) * 0.3;
-                        leg.knee.rotation.x = 0.5 + Math.sin(time * 8 + i) * 0.2;
+                        const wiggle = Math.sin(time * 6 + i * 0.7) * 0.25;
+                        if (leg.isFront) {
+                            setLegTarget(leg, {
+                                shoulder: -0.4 + wiggle,
+                                elbow: 0.6 + Math.sin(time * 8 + i) * 0.2,
+                                wrist: -0.3 + Math.sin(time * 7 + i) * 0.15
+                            });
+                        } else {
+                            setLegTarget(leg, {
+                                hip: -0.3 + wiggle,
+                                knee: 0.5 + Math.sin(time * 7 + i) * 0.2,
+                                hock: -0.4 + Math.sin(time * 9 + i) * 0.15,
+                                paw: 0.2
+                            });
+                        }
+                        updateLegPose(leg, dt, 10);
                     });
                     // Happy squinty eyes
                     leftPupil.scale.y = 0.4;
