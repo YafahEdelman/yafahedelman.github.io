@@ -218,7 +218,7 @@
         <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
         <div style="font-size: 12px; color: #666;">Fullness</div>
         <div class="stat-bar"><div id="hunger-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.4.1</div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v1.5.0</div>
     </div>
 
     <div id="state-indicator">😺 Idle</div>
@@ -1138,11 +1138,11 @@
                 wrist: wristJoint,
                 name: name,
                 isFront: true,
-                // Rest pose angles (standing naturally)
-                restPose: { shoulder: 0.1, elbow: -0.15, wrist: 0.05 },
+                // Rest pose angles (standing naturally) - more visible bend
+                restPose: { shoulder: 0.15, elbow: -0.35, wrist: 0.2 },
                 // Current animation targets
-                targetPose: { shoulder: 0.1, elbow: -0.15, wrist: 0.05 },
-                currentPose: { shoulder: 0.1, elbow: -0.15, wrist: 0.05 }
+                targetPose: { shoulder: 0.15, elbow: -0.35, wrist: 0.2 },
+                currentPose: { shoulder: 0.15, elbow: -0.35, wrist: 0.2 }
             };
         }
 
@@ -1382,7 +1382,7 @@
         // Sitting pose
         function getSitPose(leg) {
             if (leg.isFront) {
-                return { shoulder: 0.05, elbow: -0.1, wrist: 0.05 };
+                return { shoulder: 0.1, elbow: -0.4, wrist: 0.3 };
             } else {
                 // Back legs tucked under when sitting
                 return { hip: 1.2, knee: -1.8, hock: 1.5, paw: -0.4 };
@@ -1828,7 +1828,9 @@
             'ZOOMIES': '⚡ ZOOMIES!',
             'ROLLOVER': '🙃 Rolling Over',
             'CURIOUS': '🔍 Curious',
-            'WINDOW_WATCH': '🪟 Watching Birds'
+            'WINDOW_WATCH': '🪟 Watching Birds',
+            'JUMP_BAT': '🐾 Batting Toy',
+            'RUB': '😸 Rubbing'
         };
 
         function setState(newState, goal = null) {
@@ -1950,7 +1952,24 @@
                 }
 
                 if (rand < 0.15) {
+                    // Go to scratching post for various activities
                     setState('WALK', 'scratch');
+                    targetPos.copy(locations.scratchPost);
+                    stateTimer = 8;
+                    return;
+                }
+
+                // Jump and bat at dangling toy (high energy activity)
+                if (rand < 0.12 && stats.energy > 70) {
+                    setState('WALK', 'jumpbat');
+                    targetPos.copy(locations.scratchPost);
+                    stateTimer = 8;
+                    return;
+                }
+
+                // Rub affectionately against the post
+                if (rand < 0.1) {
+                    setState('WALK', 'rub');
                     targetPos.copy(locations.scratchPost);
                     stateTimer = 8;
                     return;
@@ -2590,6 +2609,12 @@
                     } else if (currentGoal === 'scratch') {
                         setState('SCRATCH');
                         stateTimer = 3 + Math.random() * 2;
+                    } else if (currentGoal === 'jumpbat') {
+                        setState('JUMP_BAT');
+                        stateTimer = 3;
+                    } else if (currentGoal === 'rub') {
+                        setState('RUB');
+                        stateTimer = 4;
                     } else if (currentGoal === 'window') {
                         setState('WINDOW_WATCH');
                         stateTimer = 4 + Math.random() * 4;
@@ -3170,6 +3195,162 @@
                     stateTimer = 2;
                     headGroup.rotation.y = 0;
                     headGroup.rotation.x = 0;
+                }
+            }
+            else if (state === 'JUMP_BAT') {
+                // Jumping up to bat at the dangling toy on scratching post
+                stateTimer -= dt;
+
+                // Scratching post is at (6, 0.15, -4), dangling toy at offset (0.6, 3.5, 0)
+                const toyWorldPos = new THREE.Vector3(6.6, 3.65, -4);
+                const toToy = toyWorldPos.clone().sub(kittenGroup.position);
+                toToy.y = 0;
+
+                // Face the toy
+                const targetRotation = Math.atan2(toToy.x, toToy.z);
+                let rotDiff = targetRotation - kittenGroup.rotation.y;
+                while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                kittenGroup.rotation.y += rotDiff * 5 * dt;
+
+                // Jump cycle - crouch, jump, land
+                const jumpPhase = (3 - stateTimer) / 3; // 0 to 1 over 3 seconds
+
+                if (jumpPhase < 0.3) {
+                    // Crouch phase - compress down
+                    const crouchAmount = jumpPhase / 0.3;
+                    kittenGroup.position.y = -0.2 * crouchAmount;
+                    legs.forEach(leg => {
+                        const pose = getCrouchPose(leg);
+                        setLegTarget(leg, pose);
+                        updateLegPose(leg, dt, 8);
+                    });
+                } else if (jumpPhase < 0.6) {
+                    // Jump phase - spring up!
+                    const jumpProgress = (jumpPhase - 0.3) / 0.3;
+                    const jumpHeight = Math.sin(jumpProgress * Math.PI) * 2.5;
+                    kittenGroup.position.y = jumpHeight;
+
+                    // Extend front legs to bat
+                    setLegTarget(legFL, { shoulder: -0.8, elbow: 0.3, wrist: -0.2 });
+                    setLegTarget(legFR, { shoulder: -0.7, elbow: 0.4, wrist: -0.1 });
+                    // Back legs extended
+                    setLegTarget(legBL, { hip: 0.8, knee: -0.4, hock: 0.5, paw: -0.1 });
+                    setLegTarget(legBR, { hip: 0.8, knee: -0.4, hock: 0.5, paw: -0.1 });
+                    legs.forEach(leg => updateLegPose(leg, dt, 15));
+
+                    // Head looks up at toy
+                    headGroup.rotation.x = -0.4;
+
+                    // Bat at toy when near peak
+                    if (jumpProgress > 0.4 && jumpProgress < 0.6) {
+                        // Swing paws
+                        const batSwing = Math.sin((jumpProgress - 0.4) * Math.PI * 5);
+                        legFL.shoulder.rotation.z = batSwing * 0.4;
+                        legFR.shoulder.rotation.z = -batSwing * 0.4;
+                        // Make dangling toy swing
+                        danglingToy.position.x = 0.6 + batSwing * 0.4;
+                        danglingToy.position.z = batSwing * 0.3;
+                    }
+                } else {
+                    // Landing phase
+                    const landProgress = (jumpPhase - 0.6) / 0.4;
+                    kittenGroup.position.y = Math.max(0, 2.5 * (1 - landProgress) * (1 - landProgress));
+
+                    // Absorb landing with legs
+                    const landCrouch = Math.sin(landProgress * Math.PI * 0.5) * 0.3;
+                    legs.forEach(leg => {
+                        if (leg.isFront) {
+                            setLegTarget(leg, { shoulder: 0.2 + landCrouch, elbow: -0.5 - landCrouch, wrist: 0.3 });
+                        } else {
+                            setLegTarget(leg, { hip: 0.5 + landCrouch, knee: -1.0 - landCrouch * 0.5, hock: 1.2, paw: -0.3 });
+                        }
+                        updateLegPose(leg, dt, 10);
+                    });
+
+                    headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, 0, 3 * dt);
+                    legFL.shoulder.rotation.z = THREE.MathUtils.lerp(legFL.shoulder.rotation.z, 0, 5 * dt);
+                    legFR.shoulder.rotation.z = THREE.MathUtils.lerp(legFR.shoulder.rotation.z, 0, 5 * dt);
+                }
+
+                // Excited tail
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.z = Math.sin(time * 8 + i * 0.5) * 0.4;
+                    seg.rotation.x = -0.1;
+                });
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 2);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    kittenGroup.position.y = 0;
+                    headGroup.rotation.x = 0;
+                }
+            }
+            else if (state === 'RUB') {
+                // Rubbing against the scratching post
+                stateTimer -= dt;
+
+                // Walk in a figure-8 pattern around the post base
+                const rubPhase = (4 - stateTimer) / 4;
+                const angle = rubPhase * Math.PI * 2;
+                const postPos = new THREE.Vector3(6, 0, -4);
+                const rubRadius = 1.5;
+
+                // Figure-8 path
+                const targetX = postPos.x + Math.sin(angle) * rubRadius;
+                const targetZ = postPos.z + Math.sin(angle * 2) * rubRadius * 0.5;
+
+                const moveDir = new THREE.Vector3(targetX, 0, targetZ).sub(kittenGroup.position);
+                if (moveDir.length() > 0.1) {
+                    moveDir.normalize();
+                    kittenGroup.position.add(moveDir.multiplyScalar(1.5 * dt));
+
+                    // Face movement direction but lean towards post
+                    const targetRotation = Math.atan2(moveDir.x, moveDir.z);
+                    let rotDiff = targetRotation - kittenGroup.rotation.y;
+                    while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                    while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                    kittenGroup.rotation.y += rotDiff * 4 * dt;
+                }
+
+                // Lean body towards post (rubbing side)
+                const toPost = postPos.clone().sub(kittenGroup.position);
+                toPost.y = 0;
+                const leanAngle = Math.atan2(toPost.x, toPost.z) - kittenGroup.rotation.y;
+                kittenGroup.rotation.z = Math.sin(leanAngle) * 0.25;
+
+                // Head rubs - turn head to rub cheek on post
+                headGroup.rotation.y = Math.sin(time * 3) * 0.3;
+                headGroup.rotation.z = Math.sin(time * 2) * 0.15;
+
+                // Slow walking animation
+                walkCycle = (walkCycle + dt * 2) % 1.0;
+                legs.forEach(leg => {
+                    const pose = getWalkPose(leg, walkCycle, 0.6);
+                    setLegTarget(leg, pose);
+                    updateLegPose(leg, dt, 6);
+                });
+
+                // Tail up and happy, slight curve
+                tailSegments.forEach((seg, i) => {
+                    seg.rotation.x = -0.15 - i * 0.05;
+                    seg.rotation.z = Math.sin(time * 2 + i * 0.3) * 0.15;
+                });
+
+                // Happy squinty eyes
+                setExpression('happy', 0.7);
+
+                stats.happiness = Math.min(100, stats.happiness + dt * 1.5);
+
+                if (stateTimer <= 0) {
+                    setState('IDLE');
+                    stateTimer = 2;
+                    kittenGroup.rotation.z = 0;
+                    headGroup.rotation.y = 0;
+                    headGroup.rotation.z = 0;
+                    setExpression('neutral');
                 }
             }
             else if (state === 'ZOOMIES') {
