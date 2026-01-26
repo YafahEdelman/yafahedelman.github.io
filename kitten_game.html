@@ -2,34 +2,156 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Kitten - AI Designed Tiny Games</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Kitten Simulator - AI Designed Tiny Games</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #f0f9ff; }
+        body { margin: 0; overflow: hidden; background-color: #f0f9ff; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { touch-action: none; display: block; }
         #ui-layer {
             position: absolute;
-            top: 20px;
+            top: 10px;
             left: 50%;
             transform: translateX(-50%);
             text-align: center;
             pointer-events: none;
             z-index: 10;
         }
+        #stats-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 10;
+            min-width: 180px;
+        }
+        .stat-bar {
+            height: 12px;
+            background: #e5e7eb;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 4px 0 10px 0;
+        }
+        .stat-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.3s ease;
+        }
+        #tools-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        .tool-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        .tool-btn:hover { transform: scale(1.1); }
+        .tool-btn.active { border-color: #fbbf24; box-shadow: 0 0 20px rgba(251, 191, 36, 0.6); }
+        #state-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        #location-indicator {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            background: rgba(255,255,255,0.85);
+            padding: 8px 16px;
+            border-radius: 15px;
+            font-size: 12px;
+            z-index: 10;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #666;
+            z-index: 10;
+            max-width: 200px;
+        }
+        @media (max-width: 768px) {
+            #ui-layer h1 { font-size: 1rem; padding: 6px 12px; }
+            #stats-panel { top: auto; bottom: 90px; left: 5px; padding: 8px 10px; min-width: 120px; font-size: 10px; }
+            .stat-bar { height: 8px; margin: 2px 0 6px 0; }
+            #state-indicator { top: 5px; right: 5px; padding: 6px 12px; font-size: 12px; }
+            #location-indicator { top: 40px; right: 5px; padding: 4px 10px; font-size: 10px; }
+            #tools-panel { bottom: 10px; gap: 6px; }
+            .tool-btn { width: 46px; height: 46px; font-size: 18px; border-width: 2px; }
+            #instructions { display: none; }
+        }
+        @media (max-width: 400px) {
+            .tool-btn { width: 40px; height: 40px; font-size: 16px; }
+        }
     </style>
 </head>
 <body>
     <div id="ui-layer">
-        <h1 class="text-3xl font-bold text-gray-800 drop-shadow-md">Tiny 3D Kitten</h1>
-        <p class="text-gray-600 font-medium bg-white/80 px-4 py-2 rounded-full mt-2 inline-block shadow-sm">
-            Click or tap the kitten to pet it!
-        </p>
-        <div class="mt-4">
-            <a href="games.html" class="pointer-events-auto text-indigo-600 hover:text-indigo-800 font-bold bg-white/90 px-4 py-2 rounded-lg shadow-sm border border-indigo-100 transition-colors">
+        <h1 class="text-2xl font-bold text-gray-800 drop-shadow-md bg-white/80 px-4 py-2 rounded-full inline-block">🐱 Tiny 3D Kitten Simulator</h1>
+        <div class="mt-2">
+            <a href="games.html" class="pointer-events-auto text-indigo-600 hover:text-indigo-800 font-bold bg-white/90 px-3 py-1 rounded-lg shadow-sm border border-indigo-100 transition-colors text-sm">
                 &larr; Back to Games
             </a>
         </div>
+    </div>
+
+    <div id="stats-panel">
+        <div style="font-weight: bold; margin-bottom: 10px; font-size: 16px;">🐱 Whiskers</div>
+        <div style="font-size: 12px; color: #666;">Happiness</div>
+        <div class="stat-bar"><div id="happiness-bar" class="stat-fill" style="width: 80%; background: linear-gradient(90deg, #f472b6, #ec4899);"></div></div>
+        <div style="font-size: 12px; color: #666;">Energy</div>
+        <div class="stat-bar"><div id="energy-bar" class="stat-fill" style="width: 70%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
+        <div style="font-size: 12px; color: #666;">Fullness</div>
+        <div class="stat-bar"><div id="fullness-bar" class="stat-fill" style="width: 60%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
+        <div style="font-size: 9px; color: #bbb; margin-top: 8px; text-align: right;">v2.0.0</div>
+    </div>
+
+    <div id="state-indicator">😺 Idle</div>
+    <div id="location-indicator">📍 Living Room</div>
+
+    <div id="tools-panel">
+        <button class="tool-btn active" id="pet-tool" style="background: linear-gradient(135deg, #fda4af, #fb7185);" title="Pet">✋</button>
+        <button class="tool-btn" id="laser-tool" style="background: linear-gradient(135deg, #f87171, #ef4444);" title="Laser Pointer">🔴</button>
+        <button class="tool-btn" id="treat-tool" style="background: linear-gradient(135deg, #a78bfa, #8b5cf6);" title="Give Treat">🍖</button>
+        <button class="tool-btn" id="yarn-tool" style="background: linear-gradient(135deg, #60a5fa, #3b82f6);" title="Throw Yarn">🧶</button>
+        <button class="tool-btn" id="catnip-tool" style="background: linear-gradient(135deg, #4ade80, #22c55e);" title="Catnip">🌿</button>
+    </div>
+
+    <div id="instructions">
+        <strong>Controls:</strong><br>
+        • Click kitten to pet<br>
+        • Drag to orbit camera<br>
+        • Scroll to zoom<br>
+        • Use tools below!
     </div>
 
     <script>
@@ -38,15 +160,69 @@
         scene.background = new THREE.Color(0xf0f9ff);
         scene.fog = new THREE.Fog(0xf0f9ff, 10, 50);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 5, 10);
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 8, 14);
         camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
         document.body.appendChild(renderer.domElement);
+
+        // --- CAMERA CONTROLS ---
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let cameraAngle = 0;
+        let cameraHeight = 8;
+        let cameraDistance = 14;
+
+        // --- STATS SYSTEM ---
+        const stats = {
+            happiness: 80,
+            energy: 70,
+            fullness: 60
+        };
+
+        function updateStatsUI() {
+            document.getElementById('happiness-bar').style.width = stats.happiness + '%';
+            document.getElementById('energy-bar').style.width = stats.energy + '%';
+            document.getElementById('fullness-bar').style.width = stats.fullness + '%';
+        }
+
+        // --- TOOL STATE ---
+        let currentTool = 'pet';
+        let laserActive = false;
+
+        // Laser dot
+        const laserDot = new THREE.Mesh(
+            new THREE.CircleGeometry(0.15, 16),
+            new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        laserDot.rotation.x = -Math.PI / 2;
+        laserDot.position.y = 0.02;
+        laserDot.visible = false;
+        scene.add(laserDot);
+
+        // Tool button event listeners
+        document.getElementById('pet-tool').addEventListener('click', () => selectTool('pet'));
+        document.getElementById('laser-tool').addEventListener('click', () => selectTool('laser'));
+        document.getElementById('treat-tool').addEventListener('click', () => selectTool('treat'));
+        document.getElementById('yarn-tool').addEventListener('click', () => selectTool('yarn'));
+        document.getElementById('catnip-tool').addEventListener('click', () => selectTool('catnip'));
+
+        function selectTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tool + '-tool').classList.add('active');
+            if (tool !== 'laser') {
+                laserDot.visible = false;
+                laserActive = false;
+            }
+        }
 
         // --- LIGHTING ---
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -1794,38 +1970,218 @@
         // --- INTERACTION ---
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
+        const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-        function onPointerDown(event) {
-            // Normalize mouse coords
+        function getFloorIntersection(event) {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const target = new THREE.Vector3();
+            raycaster.ray.intersectPlane(floorPlane, target);
+            return target;
+        }
 
+        function onPointerDown(event) {
+            // Ignore clicks on UI panels
+            if (event.target.closest('#tools-panel') || event.target.closest('#stats-panel') || event.target.closest('#instructions')) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
-            // Check intersection with kitten parts
-            const intersects = raycaster.intersectObjects(kittenGroup.children, true);
+            if (currentTool === 'pet') {
+                // Check intersection with kitten parts
+                const intersects = raycaster.intersectObjects(kittenGroup.children, true);
+                if (intersects.length > 0) {
+                    // Pet the kitten!
+                    state = 'PET';
+                    petTimer = 1.5;
+                    mood.affection = Math.min(0.95, mood.affection + 0.15);
+                    stats.happiness = Math.min(100, stats.happiness + 10);
+                    updateStatsUI();
+                    for (let i = 0; i < 5; i++) spawnHeart();
+                } else {
+                    // Start camera drag
+                    isDragging = true;
+                }
+            } else if (currentTool === 'laser') {
+                laserActive = true;
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    laserDot.position.set(pos.x, 0.02, pos.z);
+                    laserDot.visible = true;
+                    if (state !== 'SLEEP' && Math.random() < 0.7) {
+                        state = 'WALK';
+                        stateTimer = 8;
+                        targetPos.copy(pos);
+                    }
+                }
+            } else if (currentTool === 'treat') {
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    stats.fullness = Math.min(100, stats.fullness + 15);
+                    stats.happiness = Math.min(100, stats.happiness + 5);
+                    updateStatsUI();
+                    if (state === 'IDLE' || state === 'WALK') {
+                        targetPos.copy(pos);
+                        state = 'WALK';
+                        stateTimer = 10;
+                    }
+                    // Spawn treat particle
+                    const treat = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.1, 8, 8),
+                        new THREE.MeshBasicMaterial({ color: 0x8B4513 })
+                    );
+                    treat.position.copy(pos);
+                    treat.position.y = 0.1;
+                    scene.add(treat);
+                    setTimeout(() => scene.remove(treat), 3000);
+                }
+            } else if (currentTool === 'yarn') {
+                const pos = getFloorIntersection(event);
+                if (pos && toys.length > 0) {
+                    // Move a toy to the clicked position
+                    const toy = toys[0];
+                    toy.mesh.position.set(pos.x, toy.mesh.position.y, pos.z);
+                    if (state !== 'SLEEP' && Math.random() < 0.5) {
+                        targetPos.copy(pos);
+                        state = 'WALK';
+                        stateTimer = 10;
+                    }
+                }
+            } else if (currentTool === 'catnip') {
+                const pos = getFloorIntersection(event);
+                if (pos) {
+                    stats.energy = Math.min(100, stats.energy + 30);
+                    stats.happiness = Math.min(100, stats.happiness + 20);
+                    mood.energy = Math.min(0.95, mood.energy + 0.3);
+                    updateStatsUI();
+                    state = 'WALK';
+                    stateTimer = 5;
+                    // Green particles
+                    for (let i = 0; i < 10; i++) {
+                        const leaf = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.05, 4, 4),
+                            new THREE.MeshBasicMaterial({ color: 0x22cc22, transparent: true })
+                        );
+                        leaf.position.set(pos.x + (Math.random() - 0.5), 0.5 + Math.random(), pos.z + (Math.random() - 0.5));
+                        scene.add(leaf);
+                        setTimeout(() => scene.remove(leaf), 2000);
+                    }
+                }
+            }
 
-            if (intersects.length > 0) {
-                // Pet/Wake the kitten!
-                state = 'PET';
-                petTimer = 1.5; // Pet for 1.5 seconds
-                // Boost affection when petted
-                mood.affection = Math.min(0.95, mood.affection + 0.15);
-                spawnHeart();
-                spawnHeart();
-                spawnHeart();
+            previousMousePosition = { x: event.clientX, y: event.clientY };
+        }
+
+        function onPointerMove(event) {
+            const pos = getFloorIntersection(event);
+
+            if (currentTool === 'laser' && laserActive && pos) {
+                laserDot.position.set(
+                    THREE.MathUtils.clamp(pos.x, -15, 15),
+                    0.02,
+                    THREE.MathUtils.clamp(pos.z, -15, 15)
+                );
+                targetPos.copy(laserDot.position);
+            } else if (isDragging) {
+                const deltaX = event.clientX - previousMousePosition.x;
+                cameraAngle += deltaX * 0.01;
+                previousMousePosition = { x: event.clientX, y: event.clientY };
             }
         }
+
+        function onPointerUp() {
+            isDragging = false;
+            if (currentTool === 'laser') {
+                laserActive = false;
+                laserDot.visible = false;
+            }
+        }
+
+        function onWheel(event) {
+            cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.01, 6, 30);
+        }
+
+        // Touch support for mobile
+        let lastPinchDistance = 0;
+        function getTouchDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches.length === 2) {
+                lastPinchDistance = getTouchDistance(event.touches);
+            }
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                const currentDistance = getTouchDistance(event.touches);
+                const delta = lastPinchDistance - currentDistance;
+                cameraDistance = THREE.MathUtils.clamp(cameraDistance + delta * 0.05, 6, 30);
+                lastPinchDistance = currentDistance;
+            }
+        }
+
         window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('wheel', onWheel);
+        window.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
 
         // --- ANIMATION LOOP ---
         const clock = new THREE.Clock();
+
+        // State emoji mapping
+        const stateEmojis = {
+            'IDLE': '😺 Idle',
+            'WALK': '🚶 Walking',
+            'SLEEP': '😴 Sleeping',
+            'PET': '😻 Being Pet',
+            'GROOM': '🧼 Grooming',
+            'LOAF': '🍞 Loafing',
+            'CURIOUS': '👀 Curious',
+            'STRETCH': '🙆 Stretching'
+        };
+
+        // Location name mapping
+        const locationNames = {
+            'livingRoom': '📍 Living Room',
+            'bedroom': '📍 Bedroom',
+            'kitchen': '📍 Kitchen',
+            'lawn': '📍 Lawn',
+            'garden': '📍 Garden',
+            'patio': '📍 Patio',
+            'pond': '📍 Pond'
+        };
 
         function animate() {
             requestAnimationFrame(animate);
 
             const dt = clock.getDelta();
             const time = clock.getElapsedTime();
+
+            // Update camera position based on controls
+            camera.position.x = Math.sin(cameraAngle) * cameraDistance + kittenGroup.position.x;
+            camera.position.z = Math.cos(cameraAngle) * cameraDistance + kittenGroup.position.z;
+            camera.position.y = cameraHeight;
+            camera.lookAt(kittenGroup.position.x, 1, kittenGroup.position.z);
+
+            // Update UI indicators
+            document.getElementById('state-indicator').textContent = stateEmojis[state] || '😺 Idle';
+            document.getElementById('location-indicator').textContent = locationNames[currentLocation] || '📍 Unknown';
+
+            // Sync mood to stats (gradual)
+            stats.happiness = Math.max(20, Math.min(100, stats.happiness + (mood.affection - 0.5) * dt * 2));
+            stats.energy = Math.max(20, Math.min(100, stats.energy + (mood.energy - 0.5) * dt * 2));
+            // Slow fullness decay
+            stats.fullness = Math.max(20, stats.fullness - dt * 0.5);
+            updateStatsUI();
 
             // Update day/night cycle
             updateDayNightCycle(dt);
