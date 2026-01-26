@@ -1715,6 +1715,8 @@
 
         // --- TOYS ---
         const toys = [];
+        let draggedToy = null;
+        let specialYarn = null;
         const toyMaterials = [
             new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.3 }),
             new THREE.MeshStandardMaterial({ color: 0x44ff44, roughness: 0.3 }),
@@ -2345,6 +2347,29 @@
         const clock = new THREE.Clock();
         let lastPawPrint = 0;
 
+        // State emoji mapping
+        const stateEmojis = {
+            'IDLE': '😺 Idle',
+            'WALK': '🚶 Walking',
+            'SLEEP': '😴 Sleeping',
+            'PET': '😻 Being Pet',
+            'GROOM': '🧼 Grooming',
+            'LOAF': '🍞 Loafing',
+            'CURIOUS': '👀 Curious',
+            'STRETCH': '🙆 Stretching'
+        };
+
+        // Location name mapping
+        const locationNames = {
+            'livingRoom': '📍 Living Room',
+            'bedroom': '📍 Bedroom',
+            'kitchen': '📍 Kitchen',
+            'lawn': '📍 Lawn',
+            'garden': '📍 Garden',
+            'patio': '📍 Patio',
+            'pond': '📍 Pond'
+        };
+
         function animate() {
             requestAnimationFrame(animate);
 
@@ -2625,7 +2650,44 @@
                     decideNextAction();
                 }
             }
-            else if (state === 'SLEEP') {
+            else if (state === 'GROOM') {
+                // Grooming: licking paw, rubbing face
+                stateTimer -= dt;
+                groomPhase += dt;
+
+                // Breathing
+                body.scale.set(1, 1 + Math.sin(time * 3) * 0.015, 1);
+
+                // Sit down slightly
+                kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.2, 3 * dt);
+
+                // Raise one front paw to face
+                const pawLift = Math.sin(groomPhase * 2) * 0.5 + 0.5;
+                legs[0].group.rotation.x = THREE.MathUtils.lerp(legs[0].group.rotation.x, -0.8 * pawLift, 5 * dt);
+                legs[0].group.rotation.z = -0.3 * pawLift;
+                legs[0].lowerLeg.rotation.x = 0.6 * pawLift;
+
+                // Head movement - licking paw or rubbing face
+                const groomCycle = Math.sin(groomPhase * 4);
+                headGroup.rotation.x = groomCycle * 0.15;
+                headGroup.position.z = 1.1 - pawLift * 0.15;
+
+                // Eyes mostly closed during grooming
+                setEyelids(0.5 + groomCycle * 0.2);
+
+                // Tail relaxed
+                animateTail(time, 0.3, 1.0);
+
+                if (stateTimer <= 0) {
+                    state = 'IDLE';
+                    stateTimer = 1.0;
+                    legs[0].group.rotation.z = 0;
+                    headGroup.rotation.x = 0;
+                    headGroup.position.z = 1.1;
+                }
+            }
+            else if (state === 'LOAF') {
+                // Cat loaf pose - legs tucked under body
                 stateTimer -= dt;
 
                 // Lower and curl
@@ -2668,6 +2730,7 @@
                 const direction = targetPos.clone().sub(currentPos);
                 direction.y = 0;
                 const dist = direction.length();
+                const moveDistance = walkSpeed * dt;
 
                 // Check if we've arrived at our goal
                 const arrivalDist = state === 'LASER' ? 0.3 : 0.8;
@@ -3700,6 +3763,11 @@
                     if (state === 'WALK' || state === 'PLAY' || state === 'HUNT') {
                         toy.velocity.add(pushDir.multiplyScalar(3 * dt));
                     }
+
+                    // Magical toys spawn sparkles when kitten plays with them!
+                    if (toy.isMagical && Math.random() < 0.05) {
+                        spawnSparkle(toy.mesh.position.clone().add(new THREE.Vector3(0, 0.2, 0)), 3);
+                    }
                 }
 
                 // Bounds
@@ -3721,6 +3789,113 @@
             if (laserDot.visible) {
                 laserDot.scale.setScalar(1 + Math.sin(time * 20) * 0.2);
             }
+
+            // Animate fireplace flames
+            fireParticles.forEach((f, i) => {
+                f.mesh.scale.y = 0.8 + Math.sin(time * 5 + f.offset) * 0.4;
+                f.mesh.position.y = 0.5 + Math.sin(time * 4 + f.offset) * 0.15;
+                f.mesh.rotation.z = Math.sin(time * 3 + f.offset) * 0.2;
+            });
+            // Flicker fire light
+            fireLight.intensity = 0.4 + Math.sin(time * 8) * 0.15 + Math.sin(time * 13) * 0.1;
+
+            // Animate fish swimming in pond
+            const fishTime = time * 0.5;
+            fishGroup.position.x = Math.sin(fishTime) * 2;
+            fishGroup.position.z = Math.cos(fishTime * 0.7) * 2;
+            fishGroup.rotation.y = Math.atan2(Math.cos(fishTime), -Math.sin(fishTime * 0.7) * 0.7);
+
+            // Gently bob lily pads
+            lilyPads.forEach((pad, i) => {
+                pad.position.y = 0.08 + Math.sin(time * 1.5 + i) * 0.01;
+            });
+
+            // === FANTASY AREA ANIMATIONS ===
+            // Pulse crystal glow
+            fantasyElements.crystals.forEach((crystal, i) => {
+                if (crystal.userData.glow) {
+                    crystal.userData.glow.intensity = 0.3 + Math.sin(time * 2 + i) * 0.2;
+                }
+            });
+
+            // Pulse fairy flower glow
+            fantasyElements.fairyFlowers.forEach((f) => {
+                const intensity = 0.3 + Math.sin(time * 3 + f.phase) * 0.3;
+                f.bloom.material.emissiveIntensity = intensity;
+            });
+
+            // Sway hanging orbs
+            fantasyElements.hangingOrbs.forEach((orb) => {
+                orb.mesh.position.y = orb.baseY + Math.sin(time * 1.5 + orb.phase) * 0.1;
+                orb.mesh.position.x += Math.sin(time * 0.8 + orb.phase) * 0.002;
+            });
+
+            // Pulse stepping stones when nearby
+            fantasyElements.steppingStones.forEach((stone) => {
+                const dist = kittenGroup.position.distanceTo(stone.mesh.position);
+                const baseIntensity = dist < 3 ? 0.4 : 0.1;
+                stone.mesh.material.emissiveIntensity = baseIntensity + Math.sin(time * 2 + stone.phase) * 0.1;
+            });
+
+            // Gently bob floating islands
+            fantasyElements.floatingIslands.forEach((island) => {
+                island.position.y = island.userData.baseY + Math.sin(time * 0.5 + island.userData.phase) * 0.2;
+            });
+
+            // Pulse fairy ring light
+            fantasyElements.fairyLight.intensity = 0.7 + Math.sin(time * 2) * 0.3;
+
+            // Update all ambient creatures
+            updateCreatures(dt, time);
+
+            // Update current location based on kitten position
+            const kx = kittenGroup.position.x;
+            const kz = kittenGroup.position.z;
+            // Check from most specific to least specific
+            // Fantasy area check: must be east of x=20 (no overlap with garden/patio)
+            if (kx >= 20 && kz >= 10) {
+                currentLocation = 'fantasy';
+            } else if (kz > 28) {
+                // Far north areas
+                if (kx < -4) currentLocation = 'pond';
+                else if (kx > 6) currentLocation = 'patio';
+                else currentLocation = 'garden';
+            } else if (kz > 8) {
+                // Lawn area (north of houses)
+                currentLocation = 'lawn';
+            } else if (kx < -10) {
+                // Bedroom (west house)
+                currentLocation = 'bedroom';
+            } else if (kx > 10) {
+                // Kitchen (east house)
+                currentLocation = 'kitchen';
+            } else {
+                // Center house
+                currentLocation = 'livingRoom';
+            }
+
+            // Fade walls based on camera and kitten proximity (aggressive fading)
+            fadingWalls.forEach(wall => {
+                const wallPos = wall.position;
+                const camDist = camera.position.distanceTo(wallPos);
+                const kittenDist = kittenGroup.position.distanceTo(new THREE.Vector3(wallPos.x, 0, wallPos.z));
+
+                // Check if wall is between camera and kitten (more sensitive)
+                const camToKitten = kittenGroup.position.clone().sub(camera.position).normalize();
+                const camToWall = wallPos.clone().sub(camera.position).normalize();
+                const isBetween = camToKitten.dot(camToWall) > 0.15; // More sensitive
+
+                // Calculate target opacity - more aggressive fading
+                let targetOpacity = 1.0;
+                if (camDist < 15) targetOpacity = Math.min(targetOpacity, camDist / 15); // Farther fade distance
+                if (kittenDist < 8) targetOpacity = Math.min(targetOpacity, kittenDist / 8); // Farther from kitten
+                if (isBetween && camDist < 25) targetOpacity = Math.min(targetOpacity, 0.05); // Nearly invisible when blocking view
+
+                // Faster smooth transition
+                wall.material.opacity = THREE.MathUtils.lerp(wall.material.opacity, targetOpacity, 0.15);
+            });
+
+            // Camera is handled at the start of animate() based on cameraFollowEnabled
 
             renderer.render(scene, camera);
         }
