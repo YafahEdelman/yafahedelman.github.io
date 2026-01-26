@@ -1698,6 +1698,8 @@
 
         // --- TOYS ---
         const toys = [];
+        let draggedToy = null;
+        let specialYarn = null;
         const toyMaterials = [
             new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4 }),
             new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.4 }),
@@ -1722,14 +1724,41 @@
             scene.add(box);
             toys.push({ mesh: box, type: 'box', radius: 0.5, velocity: new THREE.Vector3() });
 
-            // Another Ball
-            const ball2 = new THREE.Mesh(ballGeo, toyMaterials[3]);
-            ball2.castShadow = true;
-            ball2.position.set(2, 0.4, -4);
-            scene.add(ball2);
-            toys.push({ mesh: ball2, type: 'ball', radius: 0.4, velocity: new THREE.Vector3() });
+            // Yarn Ball (special draggable)
+            const yarnGroup = new THREE.Group();
+            const yarnMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.8 });
+            const yarnCore = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), yarnMat);
+            yarnGroup.add(yarnCore);
+            // Add yarn texture lines
+            for (let i = 0; i < 8; i++) {
+                const strand = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.38, 0.02, 8, 16),
+                    yarnMat
+                );
+                strand.rotation.x = Math.random() * Math.PI;
+                strand.rotation.y = Math.random() * Math.PI;
+                yarnGroup.add(strand);
+            }
+            // Trailing string
+            const stringCurve = new THREE.QuadraticBezierCurve3(
+                new THREE.Vector3(0, 0, 0.35),
+                new THREE.Vector3(0.3, 0, 0.6),
+                new THREE.Vector3(0.5, 0, 0.8)
+            );
+            const stringGeo = new THREE.TubeGeometry(stringCurve, 10, 0.02, 8, false);
+            const string = new THREE.Mesh(stringGeo, yarnMat);
+            yarnGroup.add(string);
+            yarnGroup.position.set(4, 0.35, -1);
+            yarnGroup.castShadow = true;
+            scene.add(yarnGroup);
+            specialYarn = { mesh: yarnGroup, type: 'yarn', radius: 0.35, velocity: new THREE.Vector3() };
+            toys.push(specialYarn);
         }
         createToys();
+
+        // --- FOOD/WATER LOCATIONS (in kitchen) ---
+        const foodBowlPos = new THREE.Vector3(18, 0, 2);
+        const waterBowlPos = new THREE.Vector3(18, 0, -2);
 
         // --- DAY/NIGHT CYCLE ---
         const DAY_DURATION = 300; // 5 minutes = 1 full day
@@ -1918,14 +1947,57 @@
             headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, normRot * intensity, 2 * dt);
         }
 
-        // Choose next state based on mood
+        // Special interest points for autonomous behavior
+        const interestPoints = {
+            food: new THREE.Vector3(18, 0, 2),      // Kitchen food bowl
+            water: new THREE.Vector3(18, 0, -2),   // Kitchen water bowl
+            bed: new THREE.Vector3(-18, 0, 3),     // Bedroom bed
+            couch: new THREE.Vector3(0, 0, -3),    // Living room couch
+            window: new THREE.Vector3(-6, 0, 5),   // Window for bird watching
+            garden: new THREE.Vector3(5, 0, 20),   // Garden (butterflies!)
+            pond: new THREE.Vector3(15, 0, 25),    // Pond (fish watching)
+            fireplace: new THREE.Vector3(-5, 0, 0) // Warm spot by fireplace
+        };
+
+        // Choose next state based on mood AND needs
         function chooseNextState() {
             const roll = Math.random();
 
-            // High energy = more likely to walk/play
-            // Low energy = more likely to sleep/loaf
-            // High curiosity = more likely to be curious
+            // AUTONOMOUS SELF-CARE: Check needs first
 
+            // Very hungry? Go eat!
+            if (stats.fullness < 35 && Math.random() < 0.7) {
+                targetPos.copy(interestPoints.food);
+                stateTimer = 15;
+                return 'WALK'; // Will eat when arrives
+            }
+
+            // Very tired? Go to bed!
+            if (stats.energy < 30 && Math.random() < 0.6) {
+                targetPos.copy(interestPoints.bed);
+                stateTimer = 15;
+                return 'WALK'; // Will sleep when arrives
+            }
+
+            // Bored/unhappy? Go somewhere fun!
+            if (stats.happiness < 40 && Math.random() < 0.5) {
+                const funPlaces = ['garden', 'pond', 'window'];
+                const place = funPlaces[Math.floor(Math.random() * funPlaces.length)];
+                targetPos.copy(interestPoints[place]);
+                stateTimer = 15;
+                return 'WALK';
+            }
+
+            // Cold? Go to fireplace or sunny spot
+            if (timeOfDay > 0.7 || timeOfDay < 0.25) { // Night time
+                if (Math.random() < 0.2) {
+                    targetPos.copy(interestPoints.fireplace);
+                    stateTimer = 10;
+                    return 'WALK';
+                }
+            }
+
+            // Normal mood-based behavior
             if (mood.energy < 0.3) {
                 // Sleepy
                 if (roll < 0.5) return 'SLEEP';
@@ -1949,14 +2021,23 @@
         }
 
         function pickRandomPoint() {
-            // 50% chance to stay in current location, 50% chance to explore
-            if (Math.random() < 0.5) {
+            // Check if kitten should go somewhere purposeful
+            if (stats.fullness < 50 && Math.random() < 0.3) {
+                return interestPoints.food.clone();
+            }
+            if (stats.energy < 40 && Math.random() < 0.3) {
+                return interestPoints.bed.clone();
+            }
+
+            // 40% stay in current location, 40% explore, 20% go to interesting spot
+            const choice = Math.random();
+            if (choice < 0.4) {
                 // Stay in current area
                 const bounds = locationBounds[currentLocation];
                 const x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
                 const z = bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
                 return new THREE.Vector3(x, 0, z);
-            } else {
+            } else if (choice < 0.8) {
                 // Explore a random location
                 const locationNames = Object.keys(locationBounds);
                 const targetLoc = locationNames[Math.floor(Math.random() * locationNames.length)];
@@ -1964,6 +2045,10 @@
                 const x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
                 const z = bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
                 return new THREE.Vector3(x, 0, z);
+            } else {
+                // Go to an interesting spot
+                const spots = Object.values(interestPoints);
+                return spots[Math.floor(Math.random() * spots.length)].clone();
             }
         }
 
@@ -1988,6 +2073,29 @@
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
+
+            // First check if clicking on a toy to drag it (any tool)
+            const toyMeshes = toys.map(t => t.mesh);
+            const toyIntersects = raycaster.intersectObjects(toyMeshes, true);
+            if (toyIntersects.length > 0) {
+                // Find which toy was clicked
+                let clickedMesh = toyIntersects[0].object;
+                while (clickedMesh.parent && !toyMeshes.includes(clickedMesh)) {
+                    clickedMesh = clickedMesh.parent;
+                }
+                const clickedToy = toys.find(t => t.mesh === clickedMesh || clickedMesh.parent === t.mesh);
+                if (clickedToy) {
+                    draggedToy = clickedToy;
+                    draggedToy.velocity.set(0, 0, 0);
+                    // Kitten might notice
+                    if (state === 'IDLE' && Math.random() < 0.4) {
+                        targetPos.copy(clickedToy.mesh.position);
+                        state = 'WALK';
+                        stateTimer = 10;
+                    }
+                    return;
+                }
+            }
 
             if (currentTool === 'pet') {
                 // Check intersection with kitten parts
@@ -2039,11 +2147,13 @@
                 }
             } else if (currentTool === 'yarn') {
                 const pos = getFloorIntersection(event);
-                if (pos && toys.length > 0) {
-                    // Move a toy to the clicked position
-                    const toy = toys[0];
-                    toy.mesh.position.set(pos.x, toy.mesh.position.y, pos.z);
-                    if (state !== 'SLEEP' && Math.random() < 0.5) {
+                if (pos && specialYarn) {
+                    // Pick up the yarn ball and start dragging
+                    specialYarn.mesh.position.set(pos.x, 0.35, pos.z);
+                    specialYarn.velocity.set(0, 0, 0);
+                    draggedToy = specialYarn;
+                    // Kitten might notice
+                    if (state !== 'SLEEP' && Math.random() < 0.6) {
                         targetPos.copy(pos);
                         state = 'WALK';
                         stateTimer = 10;
@@ -2077,11 +2187,31 @@
         function onPointerMove(event) {
             const pos = getFloorIntersection(event);
 
+            // Handle dragging yarn ball
+            if (draggedToy && pos) {
+                const oldPos = draggedToy.mesh.position.clone();
+                draggedToy.mesh.position.set(pos.x, 0.35, pos.z);
+                // Calculate velocity for when released
+                draggedToy.velocity.set(
+                    (draggedToy.mesh.position.x - oldPos.x) * 15,
+                    0,
+                    (draggedToy.mesh.position.z - oldPos.z) * 15
+                );
+                // Kitten follows if interested
+                if (state === 'WALK') {
+                    targetPos.copy(pos);
+                    stateTimer = Math.max(stateTimer, 3);
+                }
+                return;
+            }
+
             if (currentTool === 'laser' && laserActive && pos) {
+                // Use current location bounds for laser
+                const bounds = locationBounds[currentLocation] || { minX: -15, maxX: 15, minZ: -15, maxZ: 15 };
                 laserDot.position.set(
-                    THREE.MathUtils.clamp(pos.x, -15, 15),
+                    THREE.MathUtils.clamp(pos.x, bounds.minX, bounds.maxX),
                     0.02,
-                    THREE.MathUtils.clamp(pos.z, -15, 15)
+                    THREE.MathUtils.clamp(pos.z, bounds.minZ, bounds.maxZ)
                 );
                 targetPos.copy(laserDot.position);
             } else if (isDragging) {
@@ -2092,6 +2222,11 @@
         }
 
         function onPointerUp() {
+            // Release dragged toy with momentum
+            if (draggedToy) {
+                // Toy keeps its velocity from dragging
+                draggedToy = null;
+            }
             isDragging = false;
             if (currentTool === 'laser') {
                 laserActive = false;
@@ -2375,6 +2510,11 @@
             else if (state === 'SLEEP') {
                 stateTimer -= dt;
 
+                // Recover energy while sleeping
+                stats.energy = Math.min(100, stats.energy + dt * 3); // Recover ~3 energy per second
+                mood.energy = Math.min(0.95, mood.energy + dt * 0.02);
+                updateStatsUI();
+
                 // Curl/Lower animation
                 kittenGroup.position.y = THREE.MathUtils.lerp(kittenGroup.position.y, -0.55, 2 * dt);
                 kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0.2, 2 * dt);
@@ -2426,8 +2566,8 @@
                 kittenGroup.rotation.z = THREE.MathUtils.lerp(kittenGroup.rotation.z, 0, 4 * dt);
 
                 if (stretchPhase < 1.2) {
-                    // Front stretch - butt up, front down
-                    body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, 0.3, 4 * dt);
+                    // Front stretch - butt up, front down (add to base rotation)
+                    body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, Math.PI / 2 + 0.3, 4 * dt);
 
                     // Front legs extended forward
                     legs[0].group.rotation.x = THREE.MathUtils.lerp(legs[0].group.rotation.x, 0.4, 4 * dt);
@@ -2445,8 +2585,8 @@
                     // Tail up high
                     tailGroup.rotation.x = THREE.MathUtils.lerp(tailGroup.rotation.x || 0, -0.5, 3 * dt);
                 } else {
-                    // Return to standing
-                    body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, 0, 4 * dt);
+                    // Return to standing (restore base rotation)
+                    body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, Math.PI / 2, 4 * dt);
                     legs.forEach(leg => {
                         leg.group.rotation.x = THREE.MathUtils.lerp(leg.group.rotation.x, 0, 4 * dt);
                         leg.lowerLeg.rotation.x = THREE.MathUtils.lerp(leg.lowerLeg.rotation.x, 0, 4 * dt);
@@ -2468,7 +2608,7 @@
                 if (stateTimer <= 0) {
                     state = 'IDLE';
                     stateTimer = 1.5;
-                    body.rotation.x = 0;
+                    body.rotation.x = Math.PI / 2; // Restore horizontal orientation
                     tailGroup.rotation.x = 0;
                 }
             }
@@ -2477,9 +2617,50 @@
                 const direction = targetPos.clone().sub(currentPos);
                 const dist = direction.length();
 
-                if (dist < 0.2) {
-                    state = 'IDLE';
-                    stateTimer = 1.0 + Math.random() * 2.0;
+                if (dist < 0.5) {
+                    // Check if arrived at special location
+                    const nearFood = currentPos.distanceTo(interestPoints.food) < 1.5;
+                    const nearWater = currentPos.distanceTo(interestPoints.water) < 1.5;
+                    const nearBed = currentPos.distanceTo(interestPoints.bed) < 2;
+                    const nearFireplace = currentPos.distanceTo(interestPoints.fireplace) < 2;
+                    const nearPond = currentPos.distanceTo(interestPoints.pond) < 2;
+                    const nearGarden = currentPos.distanceTo(interestPoints.garden) < 3;
+
+                    if (nearFood && stats.fullness < 80) {
+                        // Eat! Refill fullness
+                        stats.fullness = Math.min(100, stats.fullness + 40);
+                        stats.happiness = Math.min(100, stats.happiness + 10);
+                        updateStatsUI();
+                        state = 'IDLE';
+                        stateTimer = 3.0; // Eating animation time
+                    } else if (nearWater) {
+                        // Drink!
+                        stats.fullness = Math.min(100, stats.fullness + 15);
+                        updateStatsUI();
+                        state = 'IDLE';
+                        stateTimer = 2.0;
+                    } else if (nearBed && stats.energy < 60) {
+                        // Go to sleep on the bed
+                        state = 'SLEEP';
+                        stateTimer = 8.0 + Math.random() * 6.0;
+                        stats.energy = Math.min(100, stats.energy + 5); // Start recovering
+                        updateStatsUI();
+                    } else if (nearFireplace) {
+                        // Loaf by the warm fireplace
+                        state = 'LOAF';
+                        stateTimer = 5.0 + Math.random() * 5.0;
+                        stats.happiness = Math.min(100, stats.happiness + 5);
+                        updateStatsUI();
+                    } else if (nearPond || nearGarden) {
+                        // Watch fish/butterflies - become curious
+                        state = 'CURIOUS';
+                        stateTimer = 4.0 + Math.random() * 4.0;
+                        stats.happiness = Math.min(100, stats.happiness + 8);
+                        updateStatsUI();
+                    } else {
+                        state = 'IDLE';
+                        stateTimer = 1.0 + Math.random() * 2.0;
+                    }
                 } else {
                     direction.normalize();
 
