@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitten Model Viewer - 6 Direction Capture</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            overflow: hidden;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { transform: scale(1.05); }
+        .view-btn { background: #4a90d9; color: white; }
+        .capture-btn { background: #2ecc71; color: white; }
+        .capture-all-btn { background: #e74c3c; color: white; font-size: 16px; }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px 20px;
+            border-radius: 10px;
+            z-index: 100;
+        }
+        #current-view {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        #gallery {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .thumbnail {
+            width: 120px;
+            height: 120px;
+            object-fit: contain;
+            background: #333;
+            border-radius: 8px;
+            border: 2px solid #555;
+        }
+        .thumbnail:hover {
+            border-color: #4a90d9;
+            cursor: pointer;
+        }
+        #download-section {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="controls">
+        <button class="capture-all-btn" onclick="captureAllViews()">Capture All 6 Views</button>
+        <hr style="border-color: #444; margin: 5px 0;">
+        <button class="view-btn" onclick="setView('front')">Front View</button>
+        <button class="view-btn" onclick="setView('back')">Back View</button>
+        <button class="view-btn" onclick="setView('left')">Left View</button>
+        <button class="view-btn" onclick="setView('right')">Right View</button>
+        <button class="view-btn" onclick="setView('top')">Top View</button>
+        <button class="view-btn" onclick="setView('bottom')">Bottom View</button>
+        <hr style="border-color: #444; margin: 5px 0;">
+        <button class="capture-btn" onclick="captureCurrentView()">Capture Current View</button>
+    </div>
+
+    <div id="info">
+        <div id="current-view">Front View</div>
+        <div id="instructions">Click buttons to change view or capture</div>
+    </div>
+
+    <div id="gallery"></div>
+
+    <div id="download-section">
+        <button class="capture-btn" onclick="downloadAllImages()" style="display:none;" id="download-all-btn">Download All Images</button>
+    </div>
+
+    <script>
+        // === THREE.JS SETUP ===
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x2a2a4a); // Neutral dark background
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // === LIGHTING (even from all sides) ===
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        // Add lights from multiple directions for even illumination
+        const lightPositions = [
+            [5, 5, 5], [-5, 5, 5], [5, 5, -5], [-5, 5, -5],
+            [0, -5, 0], [0, 5, 0]
+        ];
+        lightPositions.forEach(pos => {
+            const light = new THREE.DirectionalLight(0xffffff, 0.3);
+            light.position.set(...pos);
+            scene.add(light);
+        });
+
+        // === KITTEN MODEL (copied from game) ===
+        const kittenGroup = new THREE.Group();
+        scene.add(kittenGroup);
+
+        // Materials - Tabby coloring
+        const materialFur = new THREE.MeshStandardMaterial({ color: 0xffaa55, roughness: 0.85 });
+        const materialFurDark = new THREE.MeshStandardMaterial({ color: 0xdd8833, roughness: 0.85 });
+        const materialWhite = new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.85 });
+        const materialEyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+        const materialIris = new THREE.MeshStandardMaterial({ color: 0x7fb069, roughness: 0.2 });
+        const materialPupil = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1 });
+        const materialEyeShine = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const materialNose = new THREE.MeshStandardMaterial({ color: 0xff8899, roughness: 0.4 });
+        const materialInnerEar = new THREE.MeshStandardMaterial({ color: 0xffbbcc, roughness: 0.6 });
+        const materialPawPad = new THREE.MeshStandardMaterial({ color: 0xffaabb, roughness: 0.5 });
+        const materialWhisker = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+        // Helper to create a capsule-like shape
+        function createCapsule(radius, length, material) {
+            const group = new THREE.Group();
+            const cylinderGeo = new THREE.CylinderGeometry(radius, radius, length, 16);
+            const cylinder = new THREE.Mesh(cylinderGeo, material);
+            cylinder.castShadow = true;
+            group.add(cylinder);
+            const sphereGeo = new THREE.SphereGeometry(radius, 16, 16);
+            const topSphere = new THREE.Mesh(sphereGeo, material);
+            topSphere.position.y = length / 2;
+            topSphere.castShadow = true;
+            group.add(topSphere);
+            const bottomSphere = new THREE.Mesh(sphereGeo, material);
+            bottomSphere.position.y = -length / 2;
+            bottomSphere.castShadow = true;
+            group.add(bottomSphere);
+            return group;
+        }
+
+        // === BODY ===
+        const body = createCapsule(0.65, 1.3, materialFur);
+        body.rotation.x = Math.PI / 2;
+        body.position.y = 1.15;
+        kittenGroup.add(body);
+
+        // Chest/belly white patch
+        const chestGeo = new THREE.SphereGeometry(0.5, 16, 16);
+        const chest = new THREE.Mesh(chestGeo, materialWhite);
+        chest.position.set(0, 1.0, 0.4);
+        chest.scale.set(0.8, 0.7, 0.6);
+        kittenGroup.add(chest);
+
+        // Shoulder bumps
+        const shoulderGeo = new THREE.SphereGeometry(0.25, 12, 12);
+        const leftShoulder = new THREE.Mesh(shoulderGeo, materialFur);
+        leftShoulder.position.set(0.35, 1.3, 0.4);
+        kittenGroup.add(leftShoulder);
+        const rightShoulder = new THREE.Mesh(shoulderGeo, materialFur);
+        rightShoulder.position.set(-0.35, 1.3, 0.4);
+        kittenGroup.add(rightShoulder);
+
+        // Hip bumps
+        const leftHip = new THREE.Mesh(shoulderGeo, materialFur);
+        leftHip.position.set(0.3, 1.2, -0.5);
+        kittenGroup.add(leftHip);
+        const rightHip = new THREE.Mesh(shoulderGeo, materialFur);
+        rightHip.position.set(-0.3, 1.2, -0.5);
+        kittenGroup.add(rightHip);
+
+        // === HEAD ===
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 1.75, 1.1);
+        kittenGroup.add(headGroup);
+
+        const headGeo = new THREE.SphereGeometry(0.6, 20, 20);
+        const head = new THREE.Mesh(headGeo, materialFur);
+        head.scale.set(1.1, 0.95, 1.0);
+        headGroup.add(head);
+
+        // Muzzle
+        const muzzleGeo = new THREE.SphereGeometry(0.25, 16, 16);
+        const muzzle = new THREE.Mesh(muzzleGeo, materialWhite);
+        muzzle.position.set(0, -0.15, 0.5);
+        muzzle.scale.set(1.0, 0.7, 0.8);
+        headGroup.add(muzzle);
+
+        // Forehead stripe
+        const foreheadStripeGeo = new THREE.BoxGeometry(0.08, 0.2, 0.1);
+        const foreheadStripe = new THREE.Mesh(foreheadStripeGeo, materialFurDark);
+        foreheadStripe.position.set(0, 0.35, 0.5);
+        foreheadStripe.rotation.x = -0.3;
+        headGroup.add(foreheadStripe);
+
+        // === EYES ===
+        function createDetailedEye(xPos) {
+            const eyeGroup = new THREE.Group();
+            eyeGroup.position.set(xPos, 0.08, 0.45);
+
+            const socketGeo = new THREE.SphereGeometry(0.14, 12, 12);
+            const socket = new THREE.Mesh(socketGeo, materialFur);
+            socket.scale.set(1.0, 0.9, 0.5);
+            eyeGroup.add(socket);
+
+            const scleraGeo = new THREE.SphereGeometry(0.11, 16, 16);
+            const sclera = new THREE.Mesh(scleraGeo, materialEyeWhite);
+            sclera.position.z = 0.05;
+            eyeGroup.add(sclera);
+
+            const irisGeo = new THREE.CircleGeometry(0.08, 16);
+            const iris = new THREE.Mesh(irisGeo, materialIris);
+            iris.position.z = 0.12;
+            eyeGroup.add(iris);
+
+            const pupilGeo = new THREE.PlaneGeometry(0.03, 0.1);
+            const pupil = new THREE.Mesh(pupilGeo, materialPupil);
+            pupil.position.z = 0.125;
+            eyeGroup.add(pupil);
+
+            const shineGeo = new THREE.CircleGeometry(0.025, 8);
+            const shine = new THREE.Mesh(shineGeo, materialEyeShine);
+            shine.position.set(0.02, 0.03, 0.13);
+            eyeGroup.add(shine);
+
+            return eyeGroup;
+        }
+
+        headGroup.add(createDetailedEye(0.22));
+        headGroup.add(createDetailedEye(-0.22));
+
+        // === EARS ===
+        function createDetailedEar(xPos, zRot) {
+            const earGroup = new THREE.Group();
+            earGroup.position.set(xPos, 0.55, 0.1);
+            earGroup.rotation.z = zRot;
+            earGroup.rotation.x = -0.15;
+
+            const outerEarGeo = new THREE.ConeGeometry(0.18, 0.4, 16);
+            const outerEar = new THREE.Mesh(outerEarGeo, materialFur);
+            earGroup.add(outerEar);
+
+            const innerEarGeo = new THREE.ConeGeometry(0.12, 0.3, 16);
+            const innerEar = new THREE.Mesh(innerEarGeo, materialInnerEar);
+            innerEar.position.set(0, -0.03, 0.05);
+            earGroup.add(innerEar);
+
+            const tuftGeo = new THREE.ConeGeometry(0.04, 0.1, 8);
+            const tuft = new THREE.Mesh(tuftGeo, materialFurDark);
+            tuft.position.y = 0.22;
+            earGroup.add(tuft);
+
+            return earGroup;
+        }
+
+        headGroup.add(createDetailedEar(0.35, -0.2));
+        headGroup.add(createDetailedEar(-0.35, 0.2));
+
+        // === NOSE ===
+        const noseGroup = new THREE.Group();
+        noseGroup.position.set(0, -0.12, 0.58);
+        headGroup.add(noseGroup);
+
+        const noseGeo = new THREE.SphereGeometry(0.06, 12, 12);
+        const nose = new THREE.Mesh(noseGeo, materialNose);
+        nose.scale.set(1.2, 0.8, 0.6);
+        noseGroup.add(nose);
+
+        const nostrilGeo = new THREE.SphereGeometry(0.015, 8, 8);
+        const leftNostril = new THREE.Mesh(nostrilGeo, materialPupil);
+        leftNostril.position.set(0.03, -0.02, 0.04);
+        noseGroup.add(leftNostril);
+        const rightNostril = new THREE.Mesh(nostrilGeo, materialPupil);
+        rightNostril.position.set(-0.03, -0.02, 0.04);
+        noseGroup.add(rightNostril);
+
+        // Mouth
+        const mouthCurve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(-0.08, -0.22, 0.55),
+            new THREE.Vector3(0, -0.26, 0.58),
+            new THREE.Vector3(0.08, -0.22, 0.55)
+        );
+        const mouthGeo = new THREE.TubeGeometry(mouthCurve, 10, 0.008, 8, false);
+        const mouth = new THREE.Mesh(mouthGeo, materialPupil);
+        headGroup.add(mouth);
+
+        // === WHISKERS ===
+        function createWhisker(side, yOffset, angle) {
+            const curve = new THREE.QuadraticBezierCurve3(
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(side * 0.15, yOffset * 0.02, 0.05),
+                new THREE.Vector3(side * 0.35, yOffset * 0.05, 0.02)
+            );
+            const whiskerGeo = new THREE.TubeGeometry(curve, 8, 0.005, 4, false);
+            const whisker = new THREE.Mesh(whiskerGeo, materialWhisker);
+            whisker.position.set(side * 0.15, -0.08 + yOffset * 0.04, 0.52);
+            whisker.rotation.z = angle;
+            return whisker;
+        }
+
+        for (let i = 0; i < 3; i++) {
+            headGroup.add(createWhisker(1, i - 1, (i - 1) * 0.1));
+            headGroup.add(createWhisker(-1, i - 1, -(i - 1) * 0.1));
+        }
+
+        // === LEGS ===
+        function createDetailedLeg(x, z, isFront) {
+            const legGroup = new THREE.Group();
+            legGroup.position.set(x, isFront ? 1.15 : 1.1, z);
+
+            const upperLegGeo = new THREE.CylinderGeometry(0.14, 0.11, 0.5, 10);
+            const upperLeg = new THREE.Mesh(upperLegGeo, materialFur);
+            upperLeg.position.y = -0.25;
+            legGroup.add(upperLeg);
+
+            const lowerLegGroup = new THREE.Group();
+            lowerLegGroup.position.y = -0.5;
+            legGroup.add(lowerLegGroup);
+
+            const lowerLegGeo = new THREE.CylinderGeometry(0.10, 0.08, 0.5, 10);
+            const lowerLeg = new THREE.Mesh(lowerLegGeo, materialFur);
+            lowerLeg.position.y = -0.25;
+            lowerLegGroup.add(lowerLeg);
+
+            const pawGroup = new THREE.Group();
+            pawGroup.position.y = -0.5;
+            lowerLegGroup.add(pawGroup);
+
+            const pawGeo = new THREE.SphereGeometry(0.1, 12, 12);
+            const paw = new THREE.Mesh(pawGeo, materialFur);
+            paw.scale.set(1.2, 0.5, 1.3);
+            paw.position.y = -0.02;
+            pawGroup.add(paw);
+
+            const toeGeo = new THREE.SphereGeometry(0.03, 8, 8);
+            const toePositions = [
+                { x: 0.04, z: 0.06 }, { x: -0.04, z: 0.06 },
+                { x: 0.06, z: 0.02 }, { x: -0.06, z: 0.02 }
+            ];
+            toePositions.forEach(pos => {
+                const toe = new THREE.Mesh(toeGeo, materialPawPad);
+                toe.position.set(pos.x, -0.05, pos.z);
+                toe.scale.y = 0.6;
+                pawGroup.add(toe);
+            });
+
+            const mainPadGeo = new THREE.SphereGeometry(0.05, 8, 8);
+            const mainPad = new THREE.Mesh(mainPadGeo, materialPawPad);
+            mainPad.position.set(0, -0.05, -0.02);
+            mainPad.scale.set(1.2, 0.5, 1.0);
+            pawGroup.add(mainPad);
+
+            kittenGroup.add(legGroup);
+            return legGroup;
+        }
+
+        createDetailedLeg(0.35, 0.55, true);
+        createDetailedLeg(-0.35, 0.55, true);
+        createDetailedLeg(0.35, -0.55, false);
+        createDetailedLeg(-0.35, -0.55, false);
+
+        // === TAIL ===
+        const tailGroup = new THREE.Group();
+        tailGroup.position.set(0, 1.3, -0.75);
+        kittenGroup.add(tailGroup);
+
+        let prevSegment = tailGroup;
+        for (let i = 0; i < 4; i++) {
+            const segmentGroup = new THREE.Group();
+            const segLen = 0.3 - i * 0.03;
+            const segRad = 0.09 - i * 0.015;
+
+            const segGeo = new THREE.CylinderGeometry(segRad, segRad - 0.01, segLen, 8);
+            const segment = new THREE.Mesh(segGeo, materialFur);
+
+            if (i === 0) {
+                segmentGroup.position.set(0, 0.15, -0.1);
+                segmentGroup.rotation.x = -0.5;
+            } else {
+                segmentGroup.position.y = -segLen * 0.8;
+                segmentGroup.rotation.x = 0.15;
+            }
+
+            segment.position.y = -segLen / 2;
+            segmentGroup.add(segment);
+            prevSegment.add(segmentGroup);
+            prevSegment = segmentGroup;
+        }
+
+        const tailTipGeo = new THREE.SphereGeometry(0.05, 8, 8);
+        const tailTip = new THREE.Mesh(tailTipGeo, materialFurDark);
+        tailTip.position.y = -0.15;
+        prevSegment.add(tailTip);
+
+        // Center the model
+        kittenGroup.position.y = -1.0;
+
+        // === VIEW CONFIGURATIONS ===
+        const views = {
+            front: { position: [0, 1.5, 5], lookAt: [0, 1, 0] },
+            back: { position: [0, 1.5, -5], lookAt: [0, 1, 0] },
+            left: { position: [5, 1.5, 0], lookAt: [0, 1, 0] },
+            right: { position: [-5, 1.5, 0], lookAt: [0, 1, 0] },
+            top: { position: [0, 6, 0.01], lookAt: [0, 1, 0] },
+            bottom: { position: [0, -4, 0.01], lookAt: [0, 1, 0] }
+        };
+
+        let currentViewName = 'front';
+        const capturedImages = {};
+
+        function setView(viewName) {
+            const view = views[viewName];
+            camera.position.set(...view.position);
+            camera.lookAt(...view.lookAt);
+            currentViewName = viewName;
+            document.getElementById('current-view').textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1) + ' View';
+            renderer.render(scene, camera);
+        }
+
+        function captureCurrentView() {
+            renderer.render(scene, camera);
+            const dataUrl = renderer.domElement.toDataURL('image/png');
+            capturedImages[currentViewName] = dataUrl;
+            updateGallery();
+            return dataUrl;
+        }
+
+        async function captureAllViews() {
+            const viewNames = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+
+            for (const viewName of viewNames) {
+                setView(viewName);
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for render
+                captureCurrentView();
+            }
+
+            document.getElementById('download-all-btn').style.display = 'block';
+            alert('All 6 views captured! Check the gallery on the right.');
+        }
+
+        function updateGallery() {
+            const gallery = document.getElementById('gallery');
+            gallery.innerHTML = '<div style="font-weight:bold;margin-bottom:10px;">Captured Images:</div>';
+
+            for (const [viewName, dataUrl] of Object.entries(capturedImages)) {
+                const container = document.createElement('div');
+                container.style.textAlign = 'center';
+
+                const img = document.createElement('img');
+                img.src = dataUrl;
+                img.className = 'thumbnail';
+                img.title = viewName + ' view - Click to download';
+                img.onclick = () => downloadImage(viewName, dataUrl);
+
+                const label = document.createElement('div');
+                label.textContent = viewName;
+                label.style.fontSize = '12px';
+                label.style.marginTop = '3px';
+
+                container.appendChild(img);
+                container.appendChild(label);
+                gallery.appendChild(container);
+            }
+        }
+
+        function downloadImage(viewName, dataUrl) {
+            const link = document.createElement('a');
+            link.download = `kitten_model_${viewName}.png`;
+            link.href = dataUrl;
+            link.click();
+        }
+
+        function downloadAllImages() {
+            for (const [viewName, dataUrl] of Object.entries(capturedImages)) {
+                setTimeout(() => downloadImage(viewName, dataUrl), 100);
+            }
+        }
+
+        // === ANIMATION LOOP ===
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // === WINDOW RESIZE ===
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Initialize
+        setView('front');
+        animate();
+    </script>
+</body>
+</html>
