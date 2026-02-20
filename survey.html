@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Usage Survey - Yafah Edelman</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .option-card { transition: all 0.15s ease; }
+        .option-card.selected { border-color: #4f46e5; background-color: #eef2ff; }
+        .option-card:hover { border-color: #a5b4fc; }
+        .option-card.selected:hover { border-color: #4f46e5; }
+        .grid-table { width: 100%; border-collapse: collapse; }
+        .grid-table th, .grid-table td { padding: 0.5rem 0.25rem; text-align: center; border-bottom: 1px solid #e5e7eb; font-size: 0.8rem; }
+        .grid-table th:first-child, .grid-table td:first-child { text-align: left; font-size: 0.875rem; }
+        .grid-table th { font-weight: 600; color: #6b7280; }
+        .grid-table tbody tr:hover { background-color: #f9fafb; }
+        @media (max-width: 639px) { .grid-desktop { display: none; } .grid-mobile { display: block; } }
+        @media (min-width: 640px) { .grid-desktop { display: block; } .grid-mobile { display: none; } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+    <div class="max-w-2xl mx-auto px-4 py-8">
+        <a href="index.html" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">&larr; Back to Home</a>
+        <h1 class="text-2xl font-bold text-gray-800 mt-4 mb-6">AI Usage Survey</h1>
+        <div id="survey-root"></div>
+    </div>
+<script>
+(function() {
+'use strict';
+
+// ==================== PRNG ====================
+function mulberry32(a) {
+    return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        var t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+const rand = mulberry32(Date.now());
+
+function shuffle(arr, anchoredBottom) {
+    anchoredBottom = anchoredBottom || [];
+    const anchored = [], rest = [];
+    for (const item of arr) {
+        if (anchoredBottom.indexOf(item) !== -1) anchored.push(item);
+        else rest.push(item);
+    }
+    for (let i = rest.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        const tmp = rest[i]; rest[i] = rest[j]; rest[j] = tmp;
+    }
+    return rest.concat(anchored);
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ==================== QUESTION DEFINITIONS ====================
+var SUBSCRIPTION_TIERS = {
+    'ChatGPT': ['ChatGPT Plus','ChatGPT Pro','ChatGPT Go'],
+    'Claude': ['Claude Pro','Claude Max 5x','Claude Max 20x'],
+    'Google Gemini': ['Google AI Plus','Google AI Pro','Google AI Ultra'],
+    'Grok': ['SuperGrok','SuperGrok Heavy'],
+    'Perplexity': ['Perplexity Pro','Perplexity Max','Education Pro'],
+    'Microsoft Copilot': ['Microsoft 365 Premium','Microsoft 365 Personal']
+};
+
+var VALIDATION_MAP = {
+    'Google Gemini': 'q2a', 'Microsoft Copilot': 'q2b',
+    'Meta AI': 'q2c', 'Grok': 'q2d', 'Perplexity': 'q2e'
+};
+
+var Q = {
+    demo_employment: {
+        id:'demo_employment', type:'single-select',
+        text:'Which of the following best describes your current employment status?',
+        options:['Employed full-time','Employed part-time','Self-employed','Student','Retired','Not currently employed'],
+        hasOther:true, randomize:false
+    },
+    q1: {
+        id:'q1', type:'multi-select',
+        text:'Which of the following AI services have you used over the past 7 days?',
+        options:['ChatGPT','Claude','Google Gemini','Microsoft Copilot','Grok','Meta AI','Perplexity','Clarity AI','I have not used an AI service over the past 7 days'],
+        hasOther:true, randomize:true,
+        anchoredBottom:['I have not used an AI service over the past 7 days'],
+        exclusive:['I have not used an AI service over the past 7 days']
+    },
+    q2a: {
+        id:'q2a', type:'multi-select',
+        text:'Which of the following ways did you access Google Gemini?',
+        options:['I went to gemini.google.com or used the Gemini app and typed a question into a chat','I saw an AI-generated summary or answer at the top of regular Google Search results','I used Gemini features built into another Google product (like Gmail or Google Docs)',"I'm not sure"],
+        hasOther:true, randomize:true, anchoredBottom:["I'm not sure"]
+    },
+    q2b: {
+        id:'q2b', type:'multi-select',
+        text:'Which of the following ways did you access Microsoft Copilot/Microsoft 365 Copilot?',
+        options:['I went to copilot.microsoft.com or used the Copilot app and typed a question into a chat','I saw an AI-generated answer while searching on Bing or Edge','I used Copilot features built into another Microsoft product (like Word, Excel, Teams)',"I'm not sure"],
+        hasOther:true, randomize:true, anchoredBottom:["I'm not sure"]
+    },
+    q2c: {
+        id:'q2c', type:'multi-select',
+        text:'Which of the following ways did you access Meta AI?',
+        options:['I went to meta.ai or used the Meta AI app and typed a question into a chat','I used the Meta AI feature built into WhatsApp, Instagram, Facebook, or Messenger','I saw an AI-generated summary or answer while searching on Facebook or Instagram',"I'm not sure"],
+        hasOther:true, randomize:true, anchoredBottom:["I'm not sure"]
+    },
+    q2d: {
+        id:'q2d', type:'multi-select',
+        text:'Which of the following ways did you access Grok?',
+        options:['I went to grok.com or used the Grok app and typed a question into a chat','I used Grok within X (formerly Twitter) by interacting in a thread','I used the chat interface in X to interact with Grok','I saw AI-generated summaries or trending topic explanations on X that were powered by Grok',"I'm not sure"],
+        hasOther:true, randomize:true, anchoredBottom:["I'm not sure"]
+    },
+    q2e: {
+        id:'q2e', type:'multi-select',
+        text:'Which of the following ways did you access Perplexity?',
+        options:['I went to perplexity.ai or used the Perplexity app and typed a question or search','I used the Perplexity feature built into WhatsApp or Telegram','I used Comet browser by Perplexity',"I'm not sure"],
+        hasOther:true, randomize:true, anchoredBottom:["I'm not sure"]
+    },
+    q3: {
+        id:'q3', type:'grid',
+        text:'Do you have access to a paid subscription to any of the following AI services?',
+        rows:['ChatGPT','Claude','Google Gemini','Microsoft Copilot','Grok','Perplexity','Character.AI','Clarity AI'],
+        columns:['Yes, subscription I pay for','Yes, subscription my employer or school pays for',"I don't have this subscription","I'm not sure"],
+        hasOtherRow:true, randomize:false
+    },
+    q4: {
+        id:'q4', type:'single-select',
+        text:'Is your AI subscription billed monthly or annually?',
+        options:['Monthly','Annually',"I'm not sure"],
+        hasOther:true, randomize:false
+    },
+    q5a: {
+        id:'q5a', type:'single-select',
+        text:'How much do you pay each month for {{SUBSCRIBED_SERVICES}}?',
+        options:["I don't pay anything / Covered by employer or school",'Up to $30','Between $30 and $99','Between $100 and $300','More than $300',"I'm not sure"],
+        randomize:false
+    },
+    q5b: {
+        id:'q5b', type:'single-select',
+        text:'How much do you pay each year for {{SUBSCRIBED_SERVICES}}?',
+        options:["I don't pay anything / Covered by employer or school",'Less than $100','Between $100 and $199','Between $200 and $299','Between $300 and $1000','More than $1000',"I'm not sure"],
+        randomize:false
+    },
+    q6: {
+        id:'q6', type:'multi-select',
+        text:'Which of the following paid subscriptions do you have access to?',
+        options:[], dynamic:true, hasOther:true, randomize:false
+    },
+    q7: {
+        id:'q7', type:'single-select',
+        text:'In the past week, about how many days did you use {{SERVICE_NAME}}?',
+        options:['Once (1 day)','2-5 days','Nearly every day (6-7 days)'],
+        randomize:false
+    },
+    q8: {
+        id:'q8', type:'single-select',
+        text:'On the day you used {{SERVICE_NAME}} the most last week, how much did you use it?',
+        options:['A little (Used for one or two quick tasks)','Moderate (Used multiple times during the day)','A lot (Used repeatedly or relied on it heavily throughout the day)'],
+        randomize:false
+    },
+    q9: {
+        id:'q9', type:'single-select',
+        text:'Which of the following best describes how you used {{SERVICE_NAME}} in the past week?',
+        options:['I used it mostly for work','I used it mostly for personal purposes','I used it roughly equally between work and personal purposes',"I'm not sure"],
+        randomize:false
+    },
+    q10: {
+        id:'q10', type:'single-select',
+        text:'When you used {{SERVICE_NAME}} for work, was it paid for or provided by your employer?',
+        options:['Yes, I used an AI service my employer pays for or provides','No, I used my own personal subscription or a free version','I used both employer-provided and personal AI services',"I'm not sure"],
+        randomize:false
+    },
+    q11: {
+        id:'q11', type:'grid',
+        text:'Have you ever used {{SERVICE_NAME}} for any of the following tasks?',
+        rows:['Writing or editing text (e.g., emails, documents, summaries)','Summarizing or analyzing a long document or webpage','Advice or learning (including how-to advice, tutoring)','Brainstorming or generating ideas','Technical work (e.g., math, data analysis, programming)','Looking up information or getting recommendations','Creating or editing images','Personal reflection or chatting for fun','Friendship or companionship'],
+        columns:['Yes','No',"I'm not sure"],
+        randomize:true, hasOtherRow:false
+    },
+    q12: {
+        id:'q12', type:'multi-select',
+        text:'Which of the following ways have you ever interacted with {{SERVICE_NAME}}?',
+        options:['Typed a question or prompt','Had a voice conversation','Uploaded a file, image, or document for the AI to analyze','Had the AI search the web for you','Used the AI to generate an image','Used the AI inside another app (e.g., Copilot in Word, Gemini in Gmail)','Used an AI system that autonomously completed tasks (e.g., autonomous AI agent)','None of the above'],
+        randomize:true, anchoredBottom:['None of the above'],
+        exclusive:['None of the above']
+    },
+    q13: {
+        id:'q13', type:'single-select',
+        text:'Are there parts of your job that you used to do yourself that {{SERVICE_NAME}} now does for you?',
+        options:['Yes','No',"I'm not sure"], randomize:false
+    },
+    q14: {
+        id:'q14', type:'single-select',
+        text:"Have you started doing new tasks at work that you wouldn't have done without {{SERVICE_NAME}}?",
+        options:['Yes','No',"I'm not sure"], randomize:false
+    },
+    q15: {
+        id:'q15', type:'grid',
+        text:'How often do you experience the following when using {{SERVICE_NAME}}?',
+        rows:['I had to wait before I could send more messages','I was switched to a less capable or slower version of the AI','I was prompted to upgrade to a paid plan to keep using it','Other usage limit'],
+        columns:['Never','Once or twice a month','Weekly','Daily',"I'm not sure"],
+        randomize:false, hasOtherRow:false
+    }
+};
+
+// Pre-shuffle randomized options/rows
+var shuffledOpts = {}, shuffledRows = {};
+Object.keys(Q).forEach(function(id) {
+    var q = Q[id];
+    if (q.randomize && q.options) shuffledOpts[id] = shuffle(q.options.slice(), q.anchoredBottom);
+    if (q.randomize && q.rows) shuffledRows[id] = shuffle(q.rows.slice(), []);
+});
+
+// ==================== STATE ====================
+var responses = {};
+var historyStack = [];
+var currentQId = '_intro';
+var selectedValQ = null;
+var root = document.getElementById('survey-root');
+
+// ==================== HELPERS ====================
+function isEmployed() {
+    var r = responses.demo_employment;
+    if (!r) return false;
+    return ['Employed full-time','Employed part-time','Self-employed'].indexOf(r.value) !== -1;
+}
+
+function getSelectedServices() {
+    var r = responses.q1;
+    if (!r) return [];
+    return (r.values || []).filter(function(v) { return v !== 'I have not used an AI service over the past 7 days' && v !== 'Other'; });
+}
+
+function getServiceName() {
+    var svcs = getSelectedServices();
+    var r = responses.q1;
+    if (r && r.otherText && (r.values || []).indexOf('Other') !== -1) svcs.push(r.otherText);
+    if (svcs.length === 1) return svcs[0];
+    return 'an AI service';
+}
+
+function getSubscribedServices() {
+    var r = responses.q3;
+    if (!r || !r.rows) return [];
+    var svcs = [];
+    Object.keys(r.rows).forEach(function(k) {
+        var v = r.rows[k];
+        if (v === 'Yes, subscription I pay for' || v === 'Yes, subscription my employer or school pays for') svcs.push(k);
+    });
+    if (r.otherRow && r.otherRow.name && (r.otherRow.value === 'Yes, subscription I pay for' || r.otherRow.value === 'Yes, subscription my employer or school pays for')) {
+        svcs.push(r.otherRow.name);
+    }
+    return svcs;
+}
+
+function hasAnySub() {
+    return getSubscribedServices().length > 0;
+}
+
+function replacePlaceholders(text) {
+    text = text.replace(/\{\{SERVICE_NAME\}\}/g, getServiceName());
+    text = text.replace(/\{\{SUBSCRIBED_SERVICES\}\}/g, function() {
+        var svcs = getSubscribedServices();
+        if (svcs.length === 0) return 'your AI subscription(s)';
+        if (svcs.length === 1) return svcs[0];
+        return svcs.slice(0,-1).join(', ') + ' and ' + svcs[svcs.length-1];
+    });
+    return text;
+}
+
+function getOpts(qDef) {
+    if (qDef.dynamic && qDef.id === 'q6') {
+        var tiers = [];
+        getSubscribedServices().forEach(function(svc) {
+            if (SUBSCRIPTION_TIERS[svc]) tiers = tiers.concat(SUBSCRIPTION_TIERS[svc]);
+        });
+        tiers.push("I'm not sure");
+        return tiers;
+    }
+    return shuffledOpts[qDef.id] || qDef.options;
+}
+
+function getRows(qDef) {
+    return shuffledRows[qDef.id] || qDef.rows;
+}
+
+// ==================== FLOW RESOLVER ====================
+function resolveFlow() {
+    var flow = ['demo_employment','q1'];
+    var svcs = getSelectedServices();
+    var r1 = responses.q1;
+    if (r1 && (r1.values||[]).indexOf('Other') !== -1 && r1.otherText) svcs.push(r1.otherText);
+
+    // Q2: pick one validation question
+    var eligible = svcs.filter(function(s) { return VALIDATION_MAP[s]; });
+    if (eligible.length > 0) {
+        var eligibleQs = eligible.map(function(s) { return VALIDATION_MAP[s]; });
+        if (!selectedValQ || eligibleQs.indexOf(selectedValQ) === -1) {
+            selectedValQ = eligibleQs[Math.floor(rand() * eligibleQs.length)];
+        }
+        flow.push(selectedValQ);
+    } else {
+        selectedValQ = null;
+    }
+
+    // Q3 always
+    flow.push('q3');
+
+    // Q4-Q6 if subscriptions
+    if (hasAnySub()) {
+        flow.push('q4');
+        var q4v = responses.q4 ? responses.q4.value : null;
+        if (q4v === 'Monthly') flow.push('q5a');
+        else if (q4v === 'Annually') flow.push('q5b');
+        flow.push('q6');
+    }
+
+    // Section 2: past week users
+    var anyUsed = svcs.length > 0;
+    if (anyUsed) {
+        flow.push('q7','q8');
+        if (isEmployed()) flow.push('q9');
+        var q9v = responses.q9 ? responses.q9.value : null;
+        if (isEmployed() && (q9v === 'I used it mostly for work' || q9v === 'I used it roughly equally between work and personal purposes')) {
+            flow.push('q10');
+        }
+        flow.push('q11','q12');
+        if (isEmployed()) { flow.push('q13','q14'); }
+        flow.push('q15');
+    }
+
+    return flow;
+}
+
+// ==================== RENDERERS ====================
+function checkSVG() { return '<svg class="w-3 h-3 text-white" viewBox="0 0 12 12"><path d="M3.5 6L5.5 8L8.5 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+
+function optionCardHTML(value, isSelected, isMulti) {
+    var sel = isSelected ? 'selected border-indigo-500 bg-indigo-50' : 'border-gray-200';
+    var iconOuter, iconInner;
+    if (isMulti) {
+        iconOuter = 'w-5 h-5 border-2 rounded flex-shrink-0 flex items-center justify-center ' + (isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300');
+        iconInner = isSelected ? checkSVG() : '';
+    } else {
+        iconOuter = 'w-5 h-5 border-2 rounded-full flex-shrink-0 flex items-center justify-center ' + (isSelected ? 'border-indigo-600' : 'border-gray-300');
+        iconInner = isSelected ? '<div class="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>' : '';
+    }
+    return '<div class="option-card cursor-pointer border-2 rounded-lg p-3 ' + sel + '" data-value="' + esc(value) + '">' +
+        '<div class="flex items-center gap-3"><div class="' + iconOuter + '">' + iconInner + '</div>' +
+        '<span class="text-gray-700 text-sm">' + esc(value) + '</span></div></div>';
+}
+
+function renderSelectOptions(qDef) {
+    var opts = getOpts(qDef);
+    var isMulti = qDef.type === 'multi-select';
+    var resp = responses[qDef.id];
+    var selected, otherText;
+    if (isMulti) {
+        selected = resp ? (resp.values || []) : [];
+        otherText = resp ? (resp.otherText || '') : '';
+    } else {
+        selected = resp ? [resp.value] : [];
+        otherText = resp ? (resp.otherText || '') : '';
+    }
+
+    var h = '<div class="space-y-2">';
+    opts.forEach(function(opt) {
+        h += optionCardHTML(opt, selected.indexOf(opt) !== -1, isMulti);
+    });
+
+    if (qDef.hasOther) {
+        var otherSel = selected.indexOf('Other') !== -1;
+        var sel = otherSel ? 'selected border-indigo-500 bg-indigo-50' : 'border-gray-200';
+        var iconOuter, iconInner;
+        if (isMulti) {
+            iconOuter = 'w-5 h-5 border-2 rounded flex-shrink-0 flex items-center justify-center ' + (otherSel ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300');
+            iconInner = otherSel ? checkSVG() : '';
+        } else {
+            iconOuter = 'w-5 h-5 border-2 rounded-full flex-shrink-0 flex items-center justify-center ' + (otherSel ? 'border-indigo-600' : 'border-gray-300');
+            iconInner = otherSel ? '<div class="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>' : '';
+        }
+        h += '<div class="option-card cursor-pointer border-2 rounded-lg p-3 ' + sel + '" data-value="Other">' +
+            '<div class="flex items-center gap-3"><div class="' + iconOuter + '">' + iconInner + '</div>' +
+            '<span class="text-gray-700 text-sm">Other</span></div></div>';
+        if (otherSel) {
+            h += '<input type="text" class="other-input w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Please specify..." value="' + esc(otherText) + '">';
+        }
+    }
+    h += '</div>';
+    return h;
+}
+
+function renderGridDesktop(qDef) {
+    var rows = getRows(qDef), cols = qDef.columns;
+    var resp = responses[qDef.id] || { rows: {} };
+    var h = '<div class="grid-desktop overflow-x-auto"><table class="grid-table"><thead><tr><th></th>';
+    cols.forEach(function(c) { h += '<th class="px-1">' + esc(c) + '</th>'; });
+    h += '</tr></thead><tbody>';
+    rows.forEach(function(row) {
+        h += '<tr><td class="pr-2 text-sm text-gray-700 font-medium">' + esc(row) + '</td>';
+        cols.forEach(function(c) {
+            var checked = (resp.rows && resp.rows[row] === c) ? ' checked' : '';
+            h += '<td><input type="radio" name="grid_' + esc(qDef.id) + '_' + esc(row) + '" value="' + esc(c) + '" class="grid-radio accent-indigo-600" data-row="' + esc(row) + '"' + checked + '></td>';
+        });
+        h += '</tr>';
+    });
+    if (qDef.hasOtherRow) {
+        var otherName = (resp.otherRow && resp.otherRow.name) || '';
+        h += '<tr><td class="pr-2"><input type="text" class="grid-other-name border border-gray-300 rounded px-2 py-1 text-sm w-full" placeholder="Other..." value="' + esc(otherName) + '"></td>';
+        cols.forEach(function(c) {
+            var checked = (resp.otherRow && resp.otherRow.value === c) ? ' checked' : '';
+            h += '<td><input type="radio" name="grid_' + esc(qDef.id) + '___other" value="' + esc(c) + '" class="grid-radio-other accent-indigo-600"' + checked + '></td>';
+        });
+        h += '</tr>';
+    }
+    h += '</tbody></table></div>';
+    return h;
+}
+
+function renderGridMobile(qDef) {
+    var rows = getRows(qDef), cols = qDef.columns;
+    var resp = responses[qDef.id] || { rows: {} };
+    var h = '<div class="grid-mobile space-y-4">';
+    rows.forEach(function(row) {
+        h += '<div class="border border-gray-200 rounded-lg p-3"><p class="text-sm font-medium text-gray-700 mb-2">' + esc(row) + '</p><div class="space-y-1">';
+        cols.forEach(function(c) {
+            var checked = (resp.rows && resp.rows[row] === c) ? ' checked' : '';
+            h += '<label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-50">' +
+                '<input type="radio" name="mgrid_' + esc(qDef.id) + '_' + esc(row) + '" value="' + esc(c) + '" class="grid-radio accent-indigo-600" data-row="' + esc(row) + '"' + checked + '> ' + esc(c) + '</label>';
+        });
+        h += '</div></div>';
+    });
+    if (qDef.hasOtherRow) {
+        var otherName = (resp.otherRow && resp.otherRow.name) || '';
+        h += '<div class="border border-gray-200 rounded-lg p-3"><input type="text" class="grid-other-name border border-gray-300 rounded px-2 py-1 text-sm w-full mb-2" placeholder="Other..." value="' + esc(otherName) + '"><div class="space-y-1">';
+        cols.forEach(function(c) {
+            var checked = (resp.otherRow && resp.otherRow.value === c) ? ' checked' : '';
+            h += '<label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-50">' +
+                '<input type="radio" name="mgrid_' + esc(qDef.id) + '___other" value="' + esc(c) + '" class="grid-radio-other accent-indigo-600"' + checked + '> ' + esc(c) + '</label>';
+        });
+        h += '</div></div>';
+    }
+    h += '</div>';
+    return h;
+}
+
+function renderQuestion(qId) {
+    var qDef = Q[qId];
+    var text = replacePlaceholders(qDef.text);
+    var flow = resolveFlow();
+    var pos = flow.indexOf(qId);
+    var total = flow.length;
+    var pct = ((pos + 1) / total * 100).toFixed(1);
+
+    var h = '<div class="mb-6"><div class="flex justify-between text-sm text-gray-500 mb-1"><span>Question ' + (pos+1) + ' of ' + total + '</span></div>' +
+        '<div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-indigo-600 h-2 rounded-full transition-all" style="width:' + pct + '%"></div></div></div>';
+    h += '<h2 class="text-lg font-semibold text-gray-800 mb-4">' + text + '</h2>';
+
+    if (qDef.type === 'grid') {
+        h += renderGridDesktop(qDef);
+        h += renderGridMobile(qDef);
+    } else {
+        h += renderSelectOptions(qDef);
+    }
+
+    h += '<div id="validation-error" class="text-red-500 text-sm mt-3 hidden"></div>';
+    h += '<div class="flex justify-between mt-6">';
+    if (historyStack.length > 0) {
+        h += '<button class="back-btn px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">&larr; Back</button>';
+    } else { h += '<div></div>'; }
+    h += '<button class="next-btn px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">Next &rarr;</button>';
+    h += '</div>';
+
+    root.innerHTML = h;
+    attachHandlers(qDef);
+}
+
+// ==================== EVENT HANDLERS ====================
+function attachHandlers(qDef) {
+    // Option cards (select/multi-select)
+    root.querySelectorAll('.option-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+            var val = card.getAttribute('data-value');
+            if (qDef.type === 'multi-select') toggleMulti(qDef, val);
+            else selectSingle(qDef, val);
+            renderQuestion(qDef.id);
+        });
+    });
+
+    // Other text input
+    var otherInput = root.querySelector('.other-input');
+    if (otherInput) {
+        otherInput.addEventListener('input', function() {
+            var r = responses[qDef.id];
+            if (r) r.otherText = otherInput.value;
+        });
+        otherInput.focus();
+    }
+
+    // Grid radios
+    root.querySelectorAll('.grid-radio').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            var row = radio.getAttribute('data-row');
+            if (!responses[qDef.id]) responses[qDef.id] = { rows: {} };
+            responses[qDef.id].rows[row] = radio.value;
+            // Sync desktop/mobile
+            syncGridRadios(qDef.id, row, radio.value);
+        });
+    });
+
+    // Grid other row radios
+    root.querySelectorAll('.grid-radio-other').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            if (!responses[qDef.id]) responses[qDef.id] = { rows: {} };
+            if (!responses[qDef.id].otherRow) responses[qDef.id].otherRow = { name: '', value: '' };
+            responses[qDef.id].otherRow.value = radio.value;
+        });
+    });
+
+    // Grid other name input
+    root.querySelectorAll('.grid-other-name').forEach(function(input) {
+        input.addEventListener('input', function() {
+            if (!responses[qDef.id]) responses[qDef.id] = { rows: {} };
+            if (!responses[qDef.id].otherRow) responses[qDef.id].otherRow = { name: '', value: '' };
+            responses[qDef.id].otherRow.name = input.value;
+            // Sync both inputs
+            root.querySelectorAll('.grid-other-name').forEach(function(inp) { inp.value = input.value; });
+        });
+    });
+
+    // Navigation
+    var backBtn = root.querySelector('.back-btn');
+    if (backBtn) backBtn.addEventListener('click', goBack);
+    var nextBtn = root.querySelector('.next-btn');
+    if (nextBtn) nextBtn.addEventListener('click', function() { goNext(qDef); });
+}
+
+function syncGridRadios(qId, row, value) {
+    root.querySelectorAll('.grid-radio').forEach(function(r) {
+        if (r.getAttribute('data-row') === row) r.checked = (r.value === value);
+    });
+}
+
+function toggleMulti(qDef, val) {
+    if (!responses[qDef.id]) responses[qDef.id] = { values: [], otherText: '' };
+    var r = responses[qDef.id];
+    var excl = qDef.exclusive || [];
+
+    if (excl.indexOf(val) !== -1) {
+        // Exclusive: deselect everything else
+        r.values = [val];
+        r.otherText = '';
+    } else {
+        // Deselect any exclusive options
+        r.values = r.values.filter(function(v) { return excl.indexOf(v) === -1; });
+        var idx = r.values.indexOf(val);
+        if (idx !== -1) {
+            r.values.splice(idx, 1);
+            if (val === 'Other') r.otherText = '';
+        } else {
+            r.values.push(val);
+        }
+    }
+}
+
+function selectSingle(qDef, val) {
+    if (!responses[qDef.id]) responses[qDef.id] = { value: '', otherText: '' };
+    responses[qDef.id].value = val;
+    if (val !== 'Other') responses[qDef.id].otherText = '';
+}
+
+// ==================== VALIDATION ====================
+function validate(qDef) {
+    var r = responses[qDef.id];
+    if (qDef.type === 'single-select') {
+        if (!r || !r.value) return 'Please select an option.';
+        if (r.value === 'Other' && qDef.hasOther && (!r.otherText || !r.otherText.trim())) return 'Please specify your answer in the text field.';
+    } else if (qDef.type === 'multi-select') {
+        if (!r || !r.values || r.values.length === 0) return 'Please select at least one option.';
+        if (r.values.indexOf('Other') !== -1 && qDef.hasOther && (!r.otherText || !r.otherText.trim())) return 'Please specify your answer in the text field.';
+    } else if (qDef.type === 'grid') {
+        if (!r || !r.rows) return 'Please answer all rows.';
+        var rows = getRows(qDef);
+        for (var i = 0; i < rows.length; i++) {
+            if (!r.rows[rows[i]]) return 'Please answer all rows. Missing: "' + rows[i].substring(0,40) + '..."';
+        }
+        if (qDef.hasOtherRow && r.otherRow && r.otherRow.name && r.otherRow.name.trim() && !r.otherRow.value) {
+            return 'Please select an option for your "Other" service.';
+        }
+    }
+    return null;
+}
+
+// ==================== NAVIGATION ====================
+function goNext(qDef) {
+    var err = validate(qDef);
+    if (err) {
+        var errEl = root.querySelector('#validation-error');
+        if (errEl) { errEl.textContent = err; errEl.classList.remove('hidden'); }
+        return;
+    }
+    historyStack.push(currentQId);
+    var flow = resolveFlow();
+    var pos = flow.indexOf(currentQId);
+    if (pos >= flow.length - 1) {
+        currentQId = '_summary';
+        renderSummary();
+    } else {
+        currentQId = flow[pos + 1];
+        renderQuestion(currentQId);
+    }
+    window.scrollTo(0, 0);
+}
+
+function goBack() {
+    if (historyStack.length === 0) return;
+    currentQId = historyStack.pop();
+    if (currentQId === '_intro') {
+        renderIntro();
+    } else {
+        renderQuestion(currentQId);
+    }
+    window.scrollTo(0, 0);
+}
+
+// ==================== SUMMARY & EXPORT ====================
+function renderSummary() {
+    var flow = resolveFlow();
+    var h = '<div class="mb-6"><div class="w-full bg-indigo-600 rounded-full h-2"></div><p class="text-sm text-gray-500 mt-1">Survey complete!</p></div>';
+    h += '<h2 class="text-lg font-semibold text-gray-800 mb-4">Review Your Responses</h2>';
+    h += '<div class="space-y-4">';
+
+    flow.forEach(function(qId) {
+        var qDef = Q[qId];
+        var r = responses[qId];
+        if (!r) return;
+        var text = replacePlaceholders(qDef.text);
+        h += '<div class="border border-gray-200 rounded-lg p-4 bg-white">';
+        h += '<p class="text-sm font-medium text-gray-500 mb-1">' + esc(text) + '</p>';
+
+        if (qDef.type === 'single-select') {
+            var val = r.value === 'Other' && r.otherText ? 'Other: ' + r.otherText : r.value;
+            h += '<p class="text-gray-800">' + esc(val || '(no answer)') + '</p>';
+        } else if (qDef.type === 'multi-select') {
+            var vals = (r.values || []).map(function(v) { return v === 'Other' && r.otherText ? 'Other: ' + r.otherText : v; });
+            h += '<p class="text-gray-800">' + esc(vals.join('; ') || '(no answer)') + '</p>';
+        } else if (qDef.type === 'grid') {
+            var rows = getRows(qDef);
+            h += '<div class="mt-1 space-y-1">';
+            rows.forEach(function(row) {
+                var val = r.rows ? r.rows[row] : null;
+                if (val) h += '<div class="flex justify-between text-sm"><span class="text-gray-600">' + esc(row.length > 50 ? row.substring(0,50)+'...' : row) + '</span><span class="text-gray-800 font-medium ml-2">' + esc(val) + '</span></div>';
+            });
+            if (r.otherRow && r.otherRow.name) {
+                h += '<div class="flex justify-between text-sm"><span class="text-gray-600">Other: ' + esc(r.otherRow.name) + '</span><span class="text-gray-800 font-medium ml-2">' + esc(r.otherRow.value || '') + '</span></div>';
+            }
+            h += '</div>';
+        }
+        h += '</div>';
+    });
+
+    h += '</div>';
+    h += '<div class="flex flex-wrap gap-3 mt-6">';
+    h += '<button class="back-btn px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">&larr; Back</button>';
+    h += '<button class="dl-json px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">Download JSON</button>';
+    h += '<button class="dl-csv px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors">Download CSV</button>';
+    h += '</div>';
+
+    root.innerHTML = h;
+
+    var backBtn = root.querySelector('.back-btn');
+    if (backBtn) backBtn.addEventListener('click', goBack);
+    root.querySelector('.dl-json').addEventListener('click', downloadJSON);
+    root.querySelector('.dl-csv').addEventListener('click', downloadCSV);
+}
+
+function buildExportData() {
+    var flow = resolveFlow();
+    var data = {};
+    flow.forEach(function(qId) {
+        var qDef = Q[qId];
+        var r = responses[qId];
+        if (!r) return;
+        if (qDef.type === 'single-select') {
+            data[qId] = r.value === 'Other' && r.otherText ? 'Other: ' + r.otherText : r.value;
+        } else if (qDef.type === 'multi-select') {
+            data[qId] = (r.values || []).map(function(v) { return v === 'Other' && r.otherText ? 'Other: ' + r.otherText : v; });
+        } else if (qDef.type === 'grid') {
+            var gridData = {};
+            if (r.rows) Object.keys(r.rows).forEach(function(k) { gridData[k] = r.rows[k]; });
+            if (r.otherRow && r.otherRow.name) gridData['Other: ' + r.otherRow.name] = r.otherRow.value;
+            data[qId] = gridData;
+        }
+    });
+    return data;
+}
+
+function downloadJSON() {
+    var data = buildExportData();
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, 'survey_responses.json');
+}
+
+function downloadCSV() {
+    var flow = resolveFlow();
+    var lines = ['question_id,question_text,response'];
+    flow.forEach(function(qId) {
+        var qDef = Q[qId];
+        var r = responses[qId];
+        if (!r) return;
+        var text = replacePlaceholders(qDef.text);
+        if (qDef.type === 'single-select') {
+            var val = r.value === 'Other' && r.otherText ? 'Other: ' + r.otherText : r.value;
+            lines.push(csvRow(qId, text, val));
+        } else if (qDef.type === 'multi-select') {
+            var vals = (r.values||[]).map(function(v) { return v === 'Other' && r.otherText ? 'Other: ' + r.otherText : v; }).join('; ');
+            lines.push(csvRow(qId, text, vals));
+        } else if (qDef.type === 'grid') {
+            var rows = getRows(qDef);
+            rows.forEach(function(row) {
+                var val = r.rows ? (r.rows[row] || '') : '';
+                lines.push(csvRow(qId + '_' + row, text + ' [' + row + ']', val));
+            });
+            if (r.otherRow && r.otherRow.name) {
+                lines.push(csvRow(qId + '_other', text + ' [Other: ' + r.otherRow.name + ']', r.otherRow.value || ''));
+            }
+        }
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    downloadBlob(blob, 'survey_responses.csv');
+}
+
+function csvRow(id, text, val) {
+    return '"' + id.replace(/"/g,'""') + '","' + text.replace(/"/g,'""') + '","' + String(val).replace(/"/g,'""') + '"';
+}
+
+function downloadBlob(blob, filename) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
+// ==================== INTRO ====================
+function renderIntro() {
+    root.innerHTML = '<div class="text-center py-12">' +
+        '<h2 class="text-xl font-semibold text-gray-800 mb-4">Welcome</h2>' +
+        '<p class="text-gray-600 mb-8 max-w-md mx-auto">This survey asks about your AI usage habits. Your responses are stored locally in your browser and are not sent to any server.</p>' +
+        '<button class="start-btn px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-md">Begin Survey</button>' +
+        '</div>';
+    root.querySelector('.start-btn').addEventListener('click', function() {
+        historyStack.push('_intro');
+        currentQId = 'demo_employment';
+        renderQuestion(currentQId);
+    });
+}
+
+// ==================== INIT ====================
+renderIntro();
+
+})();
+</script>
+</body>
+</html>
