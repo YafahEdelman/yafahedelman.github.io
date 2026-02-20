@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starship Sweets - A Sci-Fi Visual Novel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600&family=VT323&display=swap');
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #1a202c;
+            color: white;
+            overflow: hidden;
+        }
+
+        .pixel-font {
+            font-family: 'VT323', monospace;
+        }
+
+        /* Scanline effect */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+
+        @keyframes bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .bounce-anim { animation: bounce 0.5s ease-in-out; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+
+        /* Character Sprites (CSS/SVG) */
+        .char-container {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 400px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .bg-space {
+            background: radial-gradient(circle at center, #2b1055 0%, #7597de 100%);
+            background-image:
+                radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 3px),
+                radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 2px),
+                radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 3px);
+            background-size: 550px 550px, 350px 350px, 250px 250px;
+            background-position: 0 0, 40px 60px, 130px 270px;
+        }
+
+        .bg-bridge {
+            background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+            position: relative;
+        }
+        .bg-bridge::after {
+            content: '';
+            position: absolute;
+            top: 20%; left: 10%; right: 10%; bottom: 20%;
+            border: 2px solid #63b3ed;
+            opacity: 0.3;
+            border-radius: 20px;
+        }
+
+        .dialogue-box {
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #4fd1c5;
+            box-shadow: 0 0 15px rgba(79, 209, 197, 0.5);
+        }
+
+        .choice-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #4fd1c5;
+            transition: all 0.2s;
+        }
+        .choice-btn:hover {
+            background: rgba(79, 209, 197, 0.3);
+            transform: scale(1.02);
+        }
+
+        /* Cursor blink */
+        .cursor::after {
+            content: '▋';
+            animation: blink 1s infinite;
+            color: #4fd1c5;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center bg-gray-900">
+
+    <div id="game-container" class="relative w-full max-w-4xl h-[600px] bg-black rounded-lg shadow-2xl overflow-hidden border border-gray-700">
+        <!-- Scanlines Overlay -->
+        <div class="scanlines"></div>
+
+        <!-- Background Layer -->
+        <div id="background" class="absolute inset-0 bg-space transition-colors duration-1000"></div>
+
+        <!-- Character Layer -->
+        <div id="character-layer" class="absolute inset-0 pointer-events-none">
+            <!-- Sprites will be injected here -->
+        </div>
+
+        <!-- UI Layer -->
+        <div class="absolute bottom-0 left-0 right-0 p-6 z-40">
+            <!-- Name Tag -->
+            <div id="name-tag" class="inline-block bg-teal-500 text-black font-bold px-4 py-1 rounded-t-lg transform translate-y-1 pixel-font text-xl hidden">
+                ???
+            </div>
+
+            <!-- Dialogue Box -->
+            <div class="dialogue-box rounded-lg rounded-tl-none p-6 h-40 relative cursor-pointer" onclick="game.next()">
+                <p id="dialogue-text" class="text-xl leading-relaxed text-teal-50"></p>
+                <div class="absolute bottom-4 right-4 text-xs text-gray-500 animate-pulse">Click to continue ▼</div>
+            </div>
+        </div>
+
+        <!-- Choices Layer -->
+        <div id="choices-layer" class="absolute inset-0 bg-black/50 z-50 flex flex-col items-center justify-center hidden">
+            <div id="choices-container" class="space-y-4 w-2/3 max-w-md">
+                <!-- Buttons injected here -->
+            </div>
+        </div>
+
+        <!-- Title Screen -->
+        <div id="title-screen" class="absolute inset-0 bg-space z-50 flex flex-col items-center justify-center">
+            <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-purple-500 mb-8 filter drop-shadow-lg float-anim">Starship Sweets</h1>
+            <button onclick="game.start()" class="px-8 py-3 bg-teal-500 hover:bg-teal-400 text-gray-900 font-bold rounded-full text-xl shadow-lg transition transform hover:scale-105">
+                Start Mission
+            </button>
+            <p class="mt-4 text-sm text-gray-400">A tiny sci-fi adventure</p>
+        </div>
+    </div>
+
+    <script>
+        // --- Assets (SVGs) ---
+        const SPRITES = {
+            'tea-bot': `
+                <svg width="200" height="300" viewBox="0 0 200 300" class="float-anim">
+                    <rect x="60" y="80" width="80" height="70" rx="15" fill="#e2e8f0" /> <!-- Head -->
+                    <circle cx="85" cy="105" r="8" fill="#4fd1c5" class="eye" /> <!-- Eye L -->
+                    <circle cx="115" cy="105" r="8" fill="#4fd1c5" class="eye" /> <!-- Eye R -->
+                    <rect x="90" y="125" width="20" height="5" rx="2" fill="#4a5568" /> <!-- Mouth -->
+                    <path d="M50 100 L20 60" stroke="#a0aec0" stroke-width="4" /> <!-- Antenna L -->
+                    <path d="M150 100 L180 60" stroke="#a0aec0" stroke-width="4" /> <!-- Antenna R -->
+                    <circle cx="20" cy="60" r="5" fill="#f56565" />
+                    <circle cx="180" cy="60" r="5" fill="#f56565" />
+                    <rect x="70" y="160" width="60" height="100" rx="10" fill="#cbd5e0" /> <!-- Body -->
+                </svg>
+            `,
+            'gloop': `
+                <svg width="250" height="300" viewBox="0 0 250 300" class="float-anim">
+                    <path d="M50 250 Q20 250 30 200 Q50 50 125 50 Q200 50 220 200 Q230 250 200 250 Z" fill="#68d391" stroke="#2f855a" stroke-width="3" />
+                    <circle cx="100" cy="120" r="15" fill="black" />
+                    <circle cx="150" cy="120" r="15" fill="black" />
+                    <circle cx="105" cy="115" r="5" fill="white" />
+                    <circle cx="155" cy="115" r="5" fill="white" />
+                    <path d="M110 160 Q125 180 140 160" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" />
+                    <ellipse cx="125" cy="250" rx="80" ry="20" fill="#48bb78" opacity="0.5" />
+                </svg>
+            `,
+            'gloop-happy': `
+                <svg width="250" height="300" viewBox="0 0 250 300" class="bounce-anim">
+                    <path d="M50 250 Q20 250 30 200 Q50 50 125 50 Q200 50 220 200 Q230 250 200 250 Z" fill="#f687b3" stroke="#b83280" stroke-width="3" />
+                    <circle cx="100" cy="120" r="15" fill="black" />
+                    <circle cx="150" cy="120" r="15" fill="black" />
+                    <path d="M100 160 Q125 190 150 160" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" />
+                    <path d="M40 200 L10 180" stroke="#f687b3" stroke-width="5" stroke-linecap="round" />
+                    <path d="M210 200 L240 180" stroke="#f687b3" stroke-width="5" stroke-linecap="round" />
+                </svg>
+            `
+        };
+
+        // --- Story Data ---
+        const STORY = {
+            start: {
+                bg: 'bg-space',
+                scene: [
+                    {
+                        char: 'tea-bot',
+                        name: 'Unit 734',
+                        text: "Captain! Detecting a massive energy signature ahead. It's... it's squishy."
+                    },
+                    {
+                        char: 'tea-bot',
+                        name: 'Unit 734',
+                        text: "Identifying... It's the Gelato Nebula! And Ambassador Gloop is hailing us."
+                    },
+                    {
+                        text: "You open the comms channel. The screen flickers to life."
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "GREETINGS EARTHLING. I AM GLOOP. I AM HUNGYYYY."
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "Before we discuss the Peace Treaty of Sector 9, I require a snack tribute."
+                    }
+                ],
+                choices: [
+                    { text: "Offer a cup of Hot Earl Grey Tea", next: 'tea_path' },
+                    { text: "Offer a Cosmic Cupcake (Extra Sprinkles)", next: 'cake_path' },
+                    { text: "Offer a Data Chip (Inedible)", next: 'bad_path' }
+                ]
+            },
+            tea_path: {
+                bg: 'bg-bridge',
+                scene: [
+                    {
+                        text: "You instruct Unit 734 to brew the finest cup of Earl Grey, hot."
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "*Siiip* ... Hmm..."
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "Sophisticated. Warm. Calming. I feel... diplomatic."
+                    },
+                    {
+                        char: 'tea-bot',
+                        name: 'Unit 734',
+                        text: "Success, Captain! His stress levels have decreased by 400%."
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "The treaty is signed. We shall live in harmony."
+                    },
+                    {
+                        text: "ENDING 1: SOPHISTICATED VICTORY"
+                    }
+                ],
+                choices: [
+                    { text: "Play Again", next: 'start' }
+                ]
+            },
+            cake_path: {
+                bg: 'bg-bridge',
+                scene: [
+                    {
+                        text: "You toss a Cosmic Cupcake into the teleporter."
+                    },
+                    {
+                        char: 'gloop-happy',
+                        name: 'Ambassador Gloop',
+                        text: "*NOM NOM NOM*"
+                    },
+                    {
+                        char: 'gloop-happy',
+                        name: 'Ambassador Gloop',
+                        text: "SUGAR!!! GLORIOUS SUGAR!!!"
+                    },
+                    {
+                        text: "The Ambassador starts bouncing off the walls of his ship."
+                    },
+                    {
+                        char: 'gloop-happy',
+                        name: 'Ambassador Gloop',
+                        text: "I SIGN EVERYTHING! TAKE MY PLANET! TAKE MY CAT! WOOOO!"
+                    },
+                    {
+                        text: "ENDING 2: SUGAR RUSH VICTORY"
+                    }
+                ],
+                choices: [
+                    { text: "Play Again", next: 'start' }
+                ]
+            },
+            bad_path: {
+                bg: 'bg-space',
+                scene: [
+                    {
+                        text: "You hand over a standard issue Data Chip."
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "*Crunch* ... *Spits*"
+                    },
+                    {
+                        char: 'gloop',
+                        name: 'Ambassador Gloop',
+                        text: "THIS HAS NO FLAVOR. ONLY BYTES. I AM DISPLEASED."
+                    },
+                    {
+                        char: 'tea-bot',
+                        name: 'Unit 734',
+                        text: "Oh dear. He is charging his laser cannons."
+                    },
+                    {
+                        text: "GAME OVER: INDIGESTION"
+                    }
+                ],
+                choices: [
+                    { text: "Try Again", next: 'start' }
+                ]
+            }
+        };
+
+        // --- Game Engine ---
+        const game = {
+            currentSceneId: 'start',
+            sceneIndex: 0,
+            isTyping: false,
+
+            elements: {
+                bg: document.getElementById('background'),
+                charLayer: document.getElementById('character-layer'),
+                dialogueText: document.getElementById('dialogue-text'),
+                nameTag: document.getElementById('name-tag'),
+                choicesLayer: document.getElementById('choices-layer'),
+                choicesContainer: document.getElementById('choices-container'),
+                titleScreen: document.getElementById('title-screen')
+            },
+
+            start() {
+                this.elements.titleScreen.style.display = 'none';
+                this.loadScene('start');
+            },
+
+            loadScene(sceneId) {
+                this.currentSceneId = sceneId;
+                this.sceneIndex = 0;
+                const sceneData = STORY[sceneId];
+
+                // Set Background
+                this.elements.bg.className = `absolute inset-0 transition-colors duration-1000 ${sceneData.bg}`;
+
+                this.renderFrame();
+            },
+
+            renderFrame() {
+                const sceneData = STORY[this.currentSceneId];
+
+                // Check if we reached the end of the scene dialogues
+                if (this.sceneIndex >= sceneData.scene.length) {
+                    this.showChoices(sceneData.choices);
+                    return;
+                }
+
+                const frame = sceneData.scene[this.sceneIndex];
+
+                // Update Character
+                this.elements.charLayer.innerHTML = '';
+                if (frame.char && SPRITES[frame.char]) {
+                    const charEl = document.createElement('div');
+                    charEl.className = 'char-container fade-in';
+                    charEl.innerHTML = SPRITES[frame.char];
+                    this.elements.charLayer.appendChild(charEl);
+                }
+
+                // Update Name
+                if (frame.name) {
+                    this.elements.nameTag.classList.remove('hidden');
+                    this.elements.nameTag.innerText = frame.name;
+                    this.elements.nameTag.style.backgroundColor = frame.char === 'tea-bot' ? '#cbd5e0' : '#68d391';
+                } else {
+                    this.elements.nameTag.classList.add('hidden');
+                }
+
+                // Typewriter Text
+                this.typeText(frame.text);
+            },
+
+            typeText(text) {
+                this.isTyping = true;
+                this.elements.dialogueText.innerHTML = '<span class="cursor"></span>';
+                let i = 0;
+
+                const interval = setInterval(() => {
+                    if (i < text.length) {
+                        this.elements.dialogueText.innerText = text.substring(0, i + 1);
+                        i++;
+                    } else {
+                        clearInterval(interval);
+                        this.isTyping = false;
+                    }
+                }, 30);
+
+                // Store interval to clear it if user clicks fast (optional feature)
+                this.typingInterval = interval;
+            },
+
+            next() {
+                if (this.isTyping) {
+                    // Instant finish
+                    clearInterval(this.typingInterval);
+                    const sceneData = STORY[this.currentSceneId];
+                    const frame = sceneData.scene[this.sceneIndex];
+                    this.elements.dialogueText.innerText = frame.text;
+                    this.isTyping = false;
+                } else {
+                    this.sceneIndex++;
+                    this.renderFrame();
+                }
+            },
+
+            showChoices(choices) {
+                this.elements.choicesContainer.innerHTML = '';
+                this.elements.choicesLayer.classList.remove('hidden');
+
+                choices.forEach(choice => {
+                    const btn = document.createElement('button');
+                    btn.className = 'choice-btn w-full p-4 rounded text-lg font-bold text-teal-100 mb-2';
+                    btn.innerText = choice.text;
+                    btn.onclick = () => {
+                        this.elements.choicesLayer.classList.add('hidden');
+                        this.loadScene(choice.next);
+                    };
+                    this.elements.choicesContainer.appendChild(btn);
+                });
+            }
+        };
+
+        // --- Init ---
+        // game.start() called by button
+    </script>
+</body>
+</html>
