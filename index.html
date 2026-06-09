@@ -4,46 +4,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yafah Edelman - AI Research</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Yafah Edelman</title>
+    <meta name="description" content="Yafah Edelman — Head of Data & Trends at Epoch AI.">
     <style>
+        :root {
+            --fg: #1a1a1a;
+            --muted: #666;
+            --bg: #fdfdfc;
+            --link: #2b5c99;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --fg: #e6e6e6;
+                --muted: #9a9a9a;
+                --bg: #131313;
+                --link: #8ab4f8;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--fg);
+            background: var(--bg);
+            line-height: 1.6;
+            margin: 0;
+            padding: 4rem 1.5rem;
+        }
+
+        main {
+            max-width: 40rem;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            margin: 0 0 1rem;
+        }
+
+        p {
+            margin: 0 0 1rem;
+        }
+
+        a {
+            color: var(--link);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        h2 {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin: 2.5rem 0 0.75rem;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        li {
+            margin: 0 0 0.6rem;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        footer {
+            margin-top: 3rem;
+            color: var(--muted);
+            font-size: 0.85rem;
         }
     </style>
 </head>
 
-<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col items-center justify-center">
-    <div class="text-center space-y-6 p-8 bg-white rounded-2xl shadow-xl border border-gray-100 max-w-lg w-full">
-        <h1 class="text-3xl font-bold text-gray-800">Yafah Edelman</h1>
+<body>
+    <main>
+        <h1>Yafah Edelman</h1>
+        <p>
+            I'm Head of Data &amp; Trends at <a href="https://epoch.ai">Epoch AI</a>, where I work on
+            understanding and measuring the inputs that allow AI to scale &mdash; compute, data, power, and cost.
+            Outside of that, I'm interested in AI welfare.
+        </p>
 
-        <div class="pt-4 space-y-3">
-            <a href="domain_eci.html"
-                class="block w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-md">
-                Launch Domain-ECI Explorer
-            </a>
-            <a href="ai_chart_page.html"
-                class="block w-full py-3 px-6 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-                Epoch AI Data Explorer (AI Powered)
-            </a>
-            <a href="grid_map.html"
-                class="block w-full py-3 px-6 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-                Grid Additions Map
-            </a>
-            <a href="prediction_viewer.html"
-                class="block w-full py-3 px-6 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-                Benchmark Prediction Accuracy
-            </a>
-            <a href="games.html"
-                class="block w-full py-3 px-6 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-                AI Designed Tiny Games
-            </a>
-        </div>
+        <h2>Selected writing</h2>
+        <ul>
+            <li><a href="https://epoch.ai/publications/half-of-employed-ai-users-now-use-it-for-work">AI is a common workplace tool: half of employed AI users now use it for work</a></li>
+            <li><a href="https://epoch.ai/publications/what-you-need-to-know-about-ai-data-centers">What you need to know about AI data centers</a></li>
+            <li><a href="https://epoch.ai/gradient-updates/is-almost-everyone-wrong-about-americas-ai-power-problem">Is almost everyone wrong about America's AI power problem?</a></li>
+            <li><a href="https://epoch.ai/gradient-updates/compute-scaling-will-slow-down-due-to-increasing-lead-times">Compute scaling will slow down due to increasing lead times</a></li>
+            <li><a href="https://epoch.ai/gradient-updates/why-gpt5-used-less-training-compute-than-gpt45-but-gpt6-probably-wont">Why GPT-5 used less training compute than GPT-4.5 (but GPT-6 probably won't)</a></li>
+            <li><a href="https://epoch.ai/epoch-after-hours/ai-in-2040">Forecasting AI progress until 2040</a> <span class="note">(podcast)</span></li>
+        </ul>
+        <p class="note">More at my <a href="https://epoch.ai/about/team/yafah-edelman">Epoch AI profile</a>.</p>
 
-        <div class="pt-8 text-xs text-gray-400">
-            &copy; 2026 Yafah Edelman
-        </div>
-    </div>
+        <h2>Elsewhere</h2>
+        <ul>
+            <li><a href="https://thingofthings.substack.com/p/interview-with-yafah-edelman-about">Interview on AI welfare</a> <span class="note">(Thing of Things)</span></li>
+            <li><a href="https://github.com/YafahEdelman">GitHub</a></li>
+        </ul>
+
+        <footer>&copy; 2026 Yafah Edelman</footer>
+    </main>
 </body>
 
 </html>
