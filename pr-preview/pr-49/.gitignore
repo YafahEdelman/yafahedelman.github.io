@@ -1,5 +1,0 @@
-# Dependencies
-node_modules/
-
-# Test screenshots (root only, not model_screenshots/)
-/cat_*.png
